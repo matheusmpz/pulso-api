@@ -19,7 +19,9 @@ type repoProjetosFalso struct {
 	// proj-07 a 09
 	horasEtapa  map[string]models.HorasEtapa
 	etapaPedida *string
-	err         error
+	// proj-10 e 11 (agrupamento → grupos)
+	tempoMedio map[string][]models.GrupoTempoMedio
+	err        error
 }
 
 func (r repoProjetosFalso) Progresso(context.Context, models.Filtros) (models.ResumoProgresso, error) {
