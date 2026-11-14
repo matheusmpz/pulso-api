@@ -25,6 +25,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // embute a base de fusos no binário (não depende do sistema)
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -55,6 +56,17 @@ func main() {
 		log.Fatal("Configuração inválida: ", err)
 	}
 
+	// Segredo e validade do JWT
+	jwtCfg, err := utils.CarregarConfigJWT()
+	if err != nil {
+		log.Fatal("Configuração inválida: ", err)
+	}
+
+	// Fuso usado nos limites de dia e nos timestamps das respostas
+	if err := utils.ConfigurarFuso(utils.EnvOuPadrao("APP_TIMEZONE", utils.FusoPadrao)); err != nil {
+		log.Fatal("Configuração inválida: ", err)
+	}
+
 	// Inicializa o banco e o pool antes de receber qualquer requisição
 	database := db.GetDB()
 
@@ -77,8 +89,8 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// Registra todas as rotas passando o banco
-	routes.Register(r, database)
+	// Registra todas as rotas passando o banco e a configuração do JWT
+	routes.Register(r, database, jwtCfg)
 
 	// Porta via variável de ambiente ou padrão 8080
 	port := os.Getenv("PORT")
