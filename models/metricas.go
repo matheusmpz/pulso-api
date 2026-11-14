@@ -138,3 +138,33 @@ type EtapaFunil struct {
 	Etapa         string
 	Oportunidades int
 }
+
+// EtapaPipeline alimenta o ven-06: valor em negociação por etapa atual.
+type EtapaPipeline struct {
+	Etapa     string
+	Bruto     float64 // soma do valor do orçamento de maior versão
+	Ponderado float64 // bruto × probabilidade da etapa
+}
+
+// GrupoContagem é um rótulo com uma contagem (ven-07 motivos de perda).
+type GrupoContagem struct {
+	Rotulo string
+	N      int
+}
+
+// OrigemLeads alimenta o ven-08: leads criados no período por origem e
+// o desfecho deles.
+type OrigemLeads struct {
+	Origem   string
+	Leads    int
+	Ganhas   int
+	Perdidas int
+}
+
+// ReunioesDesfecho alimenta o ven-09: média de reuniões por oportunidade
+// encerrada no período, por desfecho.
+type ReunioesDesfecho struct {
+	Desfecho string   // "ganha" ou "perdida"
+	Media    *float64 // nil se não houver oportunidades
+	N        int
+}
