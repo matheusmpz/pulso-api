@@ -17,9 +17,9 @@ func Register(r *gin.Engine, db *sql.DB, jwtCfg utils.ConfigJWT) {
 
 	RegisterAuth(r, db, jwtCfg)
 	RegisterDashboards(r, db, jwtCfg)
+	RegisterFiltros(r, db, jwtCfg)
 
 	// Rotas dos domínios — descomentar conforme as etapas forem entregues
 	// RegisterCards(r, db, jwtCfg)
-	// RegisterFiltros(r, db, jwtCfg)
 	// RegisterWS(r, db, jwtCfg)
 }

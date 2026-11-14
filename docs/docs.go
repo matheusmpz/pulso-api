@@ -213,6 +213,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/filtros/opcoes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Devolve as opções para preencher os filtros: tipos e status de projeto (valor e rótulo), origens de lead e modelos de IA existentes, projetos, times e sprints. Em cada sprint, \"atual\" indica se hoje (no fuso do app) está entre o início e o fim; o front usa isso para pré-selecionar a sprint atual.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "filtros"
+                ],
+                "summary": "Opções dos filtros",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.OpcoesFiltrosDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Devolve o status da API e do banco. Responde 503 se o banco não responder ao ping.",
@@ -311,6 +351,18 @@ const docTemplate = `{
             "properties": {
                 "dados": {
                     "$ref": "#/definitions/models.MeResposta"
+                },
+                "sucesso": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "controllers.OpcoesFiltrosDoc": {
+            "type": "object",
+            "properties": {
+                "dados": {
+                    "$ref": "#/definitions/models.OpcoesFiltros"
                 },
                 "sucesso": {
                     "type": "boolean",
@@ -455,6 +507,72 @@ const docTemplate = `{
                 }
             }
         },
+        "models.OpcaoEnum": {
+            "type": "object",
+            "properties": {
+                "rotulo": {
+                    "type": "string",
+                    "example": "Web"
+                },
+                "valor": {
+                    "type": "string",
+                    "example": "web"
+                }
+            }
+        },
+        "models.OpcoesFiltros": {
+            "type": "object",
+            "properties": {
+                "modelos": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "claude-sonnet"
+                    ]
+                },
+                "origens": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "indicacao"
+                    ]
+                },
+                "projetos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ProjetoOpcao"
+                    }
+                },
+                "sprints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SprintOpcao"
+                    }
+                },
+                "status_projeto": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.OpcaoEnum"
+                    }
+                },
+                "times": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TimeOpcao"
+                    }
+                },
+                "tipos_projeto": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.OpcaoEnum"
+                    }
+                }
+            }
+        },
         "models.PerfilResumo": {
             "type": "object",
             "properties": {
@@ -469,6 +587,73 @@ const docTemplate = `{
                 "nome": {
                     "type": "string",
                     "example": "diretoria"
+                }
+            }
+        },
+        "models.ProjetoOpcao": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "nome": {
+                    "type": "string",
+                    "example": "Portal do Cliente"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "em_andamento"
+                },
+                "tipo": {
+                    "type": "string",
+                    "example": "web"
+                }
+            }
+        },
+        "models.SprintOpcao": {
+            "type": "object",
+            "properties": {
+                "atual": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "fim": {
+                    "type": "string",
+                    "example": "2026-11-14"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "inicio": {
+                    "type": "string",
+                    "example": "2026-11-03"
+                },
+                "numero": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "time_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "time_nome": {
+                    "type": "string",
+                    "example": "Time Alfa"
+                }
+            }
+        },
+        "models.TimeOpcao": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "nome": {
+                    "type": "string",
+                    "example": "Time Alfa"
                 }
             }
         },
