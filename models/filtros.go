@@ -23,6 +23,25 @@ func (d Data) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + d.Format(FormatoData) + `"`), nil
 }
 
+// UnmarshalJSON lê "AAAA-MM-DD" (ou null). A data lida fica à
+// meia-noite em UTC; para o fuso do app, use utils.ParseData.
+func (d *Data) UnmarshalJSON(b []byte) error {
+	s := string(b)
+	if s == "null" {
+		*d = Data{}
+		return nil
+	}
+	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
+		return fmt.Errorf("data inválida: %s", s)
+	}
+	t, err := time.Parse(FormatoData, s[1:len(s)-1])
+	if err != nil {
+		return fmt.Errorf("data inválida (use AAAA-MM-DD): %w", err)
+	}
+	d.Time = t
+	return nil
+}
+
 // String devolve "AAAA-MM-DD".
 func (d Data) String() string {
 	if d.IsZero() {
