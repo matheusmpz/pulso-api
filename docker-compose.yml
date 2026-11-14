@@ -1,0 +1,93 @@
+# =====================================================================
+# docker-compose.yml — sobe a API e o PostgreSQL juntos
+#
+# Uso:  docker compose up --build
+#
+# O compose lê automaticamente o arquivo .env desta pasta e troca cada
+# ${VARIAVEL} abaixo pelo valor de lá. Nenhuma credencial fica escrita
+# aqui: tudo vem do .env (que não vai para o Git).
+#
+# A sintaxe ${VAR:?mensagem} faz o compose parar com essa mensagem se a
+# variável não estiver definida. ${VAR:-padrao} usa o padrão se faltar.
+# =====================================================================
+
+services:
+  # -------------------------------------------------------------------
+  # Banco de dados
+  # -------------------------------------------------------------------
+  db:
+    image: postgres:16
+
+    # Variáveis que a imagem oficial do Postgres usa para criar, na
+    # PRIMEIRA vez, o usuário, a senha e o banco. Reaproveitamos as
+    # mesmas DB_* que a API usa, para os dois sempre baterem.
+    environment:
+      POSTGRES_USER: ${DB_USER:?defina DB_USER no .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+      POSTGRES_DB: ${DB_NAME:?defina DB_NAME no .env}
+
+    # Publica a porta para a sua máquina: "porta_no_host:porta_no_container".
+    # Fora do Docker você acessa em localhost:5433 (DBeaver, psql...).
+    # Usamos 5433 para não colidir com o Postgres instalado localmente
+    # na 5432. Dá para trocar com DB_PORTA_DOCKER no .env.
+    ports:
+      - "${DB_PORTA_DOCKER:-5433}:5432"
+
+    volumes:
+      # Volume nomeado: os dados do banco ficam guardados pelo Docker e
+      # sobrevivem a "docker compose down". Só "down -v" apaga.
+      - pulso_pgdata:/var/lib/postgresql/data
+
+      # Scripts de inicialização. Na primeira criação do volume, o Postgres
+      # executa em ordem alfabética tudo que estiver nesta pasta.
+      # ":ro" = somente leitura dentro do container.
+      - ./db/schema_v2.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+
+    # Diz ao Docker como saber se o banco está pronto para conexões.
+    # O pg_isready vem na imagem do Postgres. O "$$" escapa o "$" para o
+    # compose: a variável é lida dentro do container, não no seu .env.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    # Reinicia o container se ele cair (a não ser que você o pare).
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------
+  # API Go
+  # -------------------------------------------------------------------
+  api:
+    # Constrói a imagem a partir do Dockerfile desta pasta.
+    build: .
+
+    # Carrega TODAS as variáveis do .env para dentro do container
+    # (JWT_SECRET, CORS_ORIGINS, DB_USER, DB_PASSWORD...).
+    env_file: .env
+
+    # "environment" tem prioridade sobre o env_file. Forçamos o endereço
+    # do banco: dentro da rede do compose, o banco se chama "db" (o nome
+    # do serviço) e escuta na porta interna 5432, não na 5433.
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+
+    # Publica a porta da API. Usa o PORT do .env (8080 se faltar) dos dois
+    # lados, então a API fica em localhost:<PORT>.
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+
+    # Só inicia a API depois que o healthcheck do banco passar. Sem isso
+    # a API poderia subir antes do banco e falhar no Ping inicial.
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+# Declaração do volume nomeado usado pelo serviço db.
+volumes:
+  pulso_pgdata:
