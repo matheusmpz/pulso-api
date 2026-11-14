@@ -50,6 +50,14 @@ definitions:
         example: true
         type: boolean
     type: object
+  controllers.OpcoesFiltrosDoc:
+    properties:
+      dados:
+        $ref: '#/definitions/models.OpcoesFiltros'
+      sucesso:
+        example: true
+        type: boolean
+    type: object
   models.CardMeta:
     properties:
       codigo:
@@ -146,6 +154,50 @@ definitions:
       perfil:
         $ref: '#/definitions/models.PerfilResumo'
     type: object
+  models.OpcaoEnum:
+    properties:
+      rotulo:
+        example: Web
+        type: string
+      valor:
+        example: web
+        type: string
+    type: object
+  models.OpcoesFiltros:
+    properties:
+      modelos:
+        example:
+        - claude-sonnet
+        items:
+          type: string
+        type: array
+      origens:
+        example:
+        - indicacao
+        items:
+          type: string
+        type: array
+      projetos:
+        items:
+          $ref: '#/definitions/models.ProjetoOpcao'
+        type: array
+      sprints:
+        items:
+          $ref: '#/definitions/models.SprintOpcao'
+        type: array
+      status_projeto:
+        items:
+          $ref: '#/definitions/models.OpcaoEnum'
+        type: array
+      times:
+        items:
+          $ref: '#/definitions/models.TimeOpcao'
+        type: array
+      tipos_projeto:
+        items:
+          $ref: '#/definitions/models.OpcaoEnum'
+        type: array
+    type: object
   models.PerfilResumo:
     properties:
       descricao:
@@ -156,6 +208,54 @@ definitions:
         type: integer
       nome:
         example: diretoria
+        type: string
+    type: object
+  models.ProjetoOpcao:
+    properties:
+      id:
+        example: 3
+        type: integer
+      nome:
+        example: Portal do Cliente
+        type: string
+      status:
+        example: em_andamento
+        type: string
+      tipo:
+        example: web
+        type: string
+    type: object
+  models.SprintOpcao:
+    properties:
+      atual:
+        example: true
+        type: boolean
+      fim:
+        example: "2026-11-14"
+        type: string
+      id:
+        example: 4
+        type: integer
+      inicio:
+        example: "2026-11-03"
+        type: string
+      numero:
+        example: 12
+        type: integer
+      time_id:
+        example: 1
+        type: integer
+      time_nome:
+        example: Time Alfa
+        type: string
+    type: object
+  models.TimeOpcao:
+    properties:
+      id:
+        example: 1
+        type: integer
+      nome:
+        example: Time Alfa
         type: string
     type: object
   models.UsuarioResumo:
@@ -313,6 +413,34 @@ paths:
       summary: Detalhe de um dashboard
       tags:
       - dashboards
+  /filtros/opcoes:
+    get:
+      consumes:
+      - application/json
+      description: 'Devolve as opções para preencher os filtros: tipos e status de
+        projeto (valor e rótulo), origens de lead e modelos de IA existentes, projetos,
+        times e sprints. Em cada sprint, "atual" indica se hoje (no fuso do app) está
+        entre o início e o fim; o front usa isso para pré-selecionar a sprint atual.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.OpcoesFiltrosDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+      security:
+      - BearerAuth: []
+      summary: Opções dos filtros
+      tags:
+      - filtros
   /health:
     get:
       consumes:
