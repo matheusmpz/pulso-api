@@ -76,11 +76,15 @@ func NovoRegistro(db *sql.DB) Registro {
 	reg.Registrar(NovoOrcadoReal(vendas))         // ven-13
 	reg.Registrar(NovoMargemPrevistaReal(vendas)) // ven-14
 
-	reg.Registrar(NovoCustoIA(ia))           // ia-01
-	reg.Registrar(NovoTokensConsumidos(ia))  // ia-02
-	reg.Registrar(NovoQuotaConsumida(ia))    // ia-03
-	reg.Registrar(NovoCustoPorAtividade(ia)) // ia-04
-	reg.Registrar(NovoConsumoDiario(ia))     // ia-05
+	reg.Registrar(NovoCustoIA(ia))               // ia-01
+	reg.Registrar(NovoTokensConsumidos(ia))      // ia-02
+	reg.Registrar(NovoQuotaConsumida(ia))        // ia-03
+	reg.Registrar(NovoCustoPorAtividade(ia))     // ia-04
+	reg.Registrar(NovoConsumoDiario(ia))         // ia-05
+	reg.Registrar(NovoCustoPorProjeto(ia))       // ia-06
+	reg.Registrar(NovoCustoPorModelo(ia))        // ia-07
+	reg.Registrar(NovoCustoPorEtapa(ia))         // ia-08
+	reg.Registrar(NovoCustoTipoComplexidade(ia)) // ia-09
 	return reg
 }
 
