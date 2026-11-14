@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: `proj-01` a `proj-11`.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos (`proj-01` a `proj-15`).** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
 
 ## Stack
 
@@ -678,6 +678,10 @@ Conjuntos **P** (projetos), **A** (atividades), **H** (horas), **T** (tokens) e 
 | `proj-07` Horas em análise, `proj-08` Horas em desenvolvimento, `proj-09` Horas em testes | `barras_agrupadas` | Acumulado | Um componente parametrizado pela etapa. Séries `estimado` (soma da estimativa da etapa — `estimativa_analise`, `estimativa_desenvolvimento` ou `estimativa_testes` — nas atividades de A) e `real` (horas de H até `ate` com a mesma `etapa`). Um item: `{rotulo: "Análise" | "Desenvolvimento" | "Testes", estimado, real, percentual}`; `percentual` = real ÷ estimado × 100 (`null` se estimado 0). Unidade `h` | `horas_lancadas`, `atividade_criada` |
 | `proj-10` Tempo médio por complexidade | `barras_agrupadas` | Período | Base: atividades de A com status atual `concluida` e data de conclusão (último evento `concluida`) entre `de` e `ate`. Sempre 3 itens (Pequena, Média, Grande). Séries `real` (média das horas lançadas totais da atividade até `ate`) e `estimado` (média de `estimativa_horas`); `null` quando o grupo não tem atividades. Chave extra `n` = quantidade. Unidade `h` | `status_atividade` |
 | `proj-11` Tempo médio por tipo de atividade | `barras_agrupadas` | Período | Mesmo cálculo do `proj-10`, agrupado por `tipo_atividade`. Só os tipos com atividades, na ordem do enum (Análise, Nova funcionalidade, Melhoria, Correção, Outro) | `status_atividade` |
+| `proj-12` Atividades estourando a estimativa | `barras` (horizontal) | Acumulado | Atividades de A com horas de H até `ate` acima de `estimativa_horas`. `valor` = horas reais − estimativa (`h`). As 5 maiores, em ordem decrescente. `rotulo` = título da atividade; `extra` = `{desvio: "130%", projeto: "..."}` (desvio = reais ÷ estimativa, arredondado para inteiro). `total` = quantidade de atividades estouradas (todas, não só as 5) | `horas_lancadas` |
+| `proj-13` Histórico de sprints | `barras_agrupadas` | Independe de `de` | As 6 sprints mais recentes com `inicio` ≤ `ate`, em ordem cronológica. `escopo=sprint`: sprints do mesmo time da sprint `id`, terminando nela (a dela com `destaque: true`); `escopo=time`: sprints do time (de todos, se vazio); `escopo=projeto`: sprints com atividades de A. Séries `planejado` (estimativa das atividades alocadas à sprint) e `concluido` (das concluídas ao fim de min(fim da sprint, `ate`)). Item: `{rotulo: "Sprint N", planejado, concluido, sprint_id, destaque}`; com sprints de mais de um time, o rótulo leva o time ("Sprint 5 · Time Alfa"). Unidade `h` | `atividade_criada`, `status_atividade` |
+| `proj-14` Distribuição de horas | `barras` (horizontal) | Período | Horas de H com `trabalhado_em` entre `de` e `ate`: por desenvolvedor em `escopo=projeto`; por projeto em `time` e `sprint`. Os 10 maiores mais um item "Outros" (soma do resto, só se houver mais de 10). Unidade `h` | `horas_lancadas` |
+| `proj-15` Custo de IA no tempo | `area` | Acumulado | Série `consumo` = tokens de T acumulados por dia (`x` = data), do primeiro consumo até `ate`. `referencia` = `{nome: "Limite de tokens", valor: quota}` (`null` se a quota for 0). Unidade `tokens` | `consumo_tokens` |
 
 Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo):
 ```json
@@ -763,6 +767,10 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - **Burndown, dias sem valor:** `restante` é `null` depois de hoje **ou** depois de `ate`, o que vier antes. Assim um `ate` no passado não mostra conclusões posteriores a ele. A especificação fala só em "dias futuros".
 - **Burndown, eixos:** a especificação não define os rótulos; foram usados "Dia da sprint" e "Horas restantes (estimativa)".
 - **Montagem dos pontos em funções puras** (`MontarBurnUp`, `MontarBurndown`): o SQL só traz os números por dia, e os pontos, o ponto final e os `null` são montados em Go, testados sem banco.
+- **Histórico de sprints em `escopo=sprint`:** nesse escopo, A só tem as atividades da própria sprint, e o planejado das outras 5 sprints ficaria zerado. Por isso o `proj-13` usa as atividades das sprints listadas (mesmo time), em projetos que passam nos filtros de tipo e status.
+- **Histórico com mais de um time:** em `escopo=time` sem `id`, a lista junta sprints de times diferentes com o mesmo número. Nesse caso o rótulo leva o nome do time (`Sprint 5 · Time Alfa`).
+- **Desvio do `proj-12` arredondado para inteiro** ("130%"), como no exemplo da especificação.
+- **`proj-15` com eixos "Dia" × "Tokens acumulados"** (não definidos na especificação).
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -782,3 +790,4 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - `PULAPI-011` — cards `proj-04` (burn-up), `proj-05` (issues por status) e `proj-06` (burndown da sprint, com a escolha da sprint alvo) e testes.
 - `PULAPI-012` — cards `proj-07`, `proj-08` e `proj-09` (horas estimadas × reais por etapa, um componente parametrizado pela etapa, com whitelist da coluna de estimativa) e testes.
 - `PULAPI-013` — cards `proj-10` e `proj-11` (tempo médio das atividades concluídas no período, por complexidade e por tipo) e testes.
+- `PULAPI-014` — cards `proj-12` (estouros), `proj-13` (histórico de sprints), `proj-14` (distribuição de horas) e `proj-15` (consumo de IA no tempo); dashboard de projetos completo.
