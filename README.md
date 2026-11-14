@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Por enquanto existem o `GET /health` e a autenticação (`POST /auth/login` e `GET /auth/me`).
+> **Status:** em construção. Por enquanto existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`) e os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`).
 
 ## Stack
 
@@ -298,6 +298,89 @@ Dados do usuário dono do token e do perfil dele.
 
 ---
 
+### Controle de acesso por perfil
+
+A tabela `perfil_cards` define quais cards cada perfil vê. Tudo é aplicado no back-end:
+
+- Um **dashboard** aparece para o perfil se estiver ativo e tiver ao menos um card **ativo e permitido**.
+- Um **card** aparece se estiver ativo e for permitido ao perfil.
+- Recurso inexistente ou inativo → **404**. Recurso que existe, mas o perfil não pode ver → **403** (`Você não tem acesso a este recurso`). A existência é verificada antes da permissão: um dashboard inativo dá 404 para todos.
+
+No seed, `diretoria` vê os 41 cards (projetos, vendas e IA) e `lider_tecnologia` vê só os 15 de projetos.
+
+---
+
+#### `GET /dashboards`
+Dashboards que o perfil do usuário pode ver, com a quantidade de cards visíveis em cada um, ordenados por `id`. Se o perfil não vê nenhum, a lista vem vazia (`[]`).
+
+**Resposta de sucesso `200`** (perfil `lider_tecnologia`)
+```json
+{
+  "sucesso": true,
+  "dados": {
+    "dashboards": [
+      {
+        "id": 1,
+        "chave": "projetos",
+        "titulo": "Projetos",
+        "descricao": "Andamento dos projetos em desenvolvimento: progresso, horas por etapa, sprints e eficiência, por projeto, time ou sprint.",
+        "total_cards": 15
+      }
+    ]
+  }
+}
+```
+
+**Erros**
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `401` | Erros de token | — |
+| `500` | Erro no banco | `Erro interno. Tente novamente mais tarde.` |
+
+---
+
+#### `GET /dashboards/:chave`
+O dashboard e a lista dos cards que o perfil pode ver, **sem os dados calculados**, ordenados por `codigo`. A `descricao` de cada card é o texto do modal de informação do front. `chave` é `projetos`, `vendas` ou `ia`.
+
+**Resposta de sucesso `200`** (`GET /dashboards/projetos`, resumida)
+```json
+{
+  "sucesso": true,
+  "dados": {
+    "id": 1,
+    "chave": "projetos",
+    "titulo": "Projetos",
+    "descricao": "Andamento dos projetos em desenvolvimento: ...",
+    "cards": [
+      {
+        "codigo": "proj-01",
+        "titulo": "Progresso",
+        "descricao": "Mostra quanto do trabalho planejado já foi concluído. ...",
+        "tipo": "numero"
+      },
+      {
+        "codigo": "proj-02",
+        "titulo": "Horas",
+        "descricao": "Mostra quanto das horas estimadas já foi consumido. ...",
+        "tipo": "numero"
+      }
+    ]
+  }
+}
+```
+
+**Erros**
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `401` | Erros de token | — |
+| `403` | O dashboard existe e está ativo, mas o perfil não vê nenhum card dele | `Você não tem acesso a este recurso` |
+| `404` | Dashboard inexistente ou inativo | `Dashboard não encontrado.` |
+| `500` | Erro no banco | `Erro interno. Tente novamente mais tarde.` |
+
+---
+
 ## Decisões de implementação
 
 - **Module path:** `pulso-api` (nenhum foi informado). Para renomear: `go mod edit -module <novo>` e ajuste dos imports.
@@ -324,6 +407,10 @@ Dados do usuário dono do token e do perfil dele.
 - **`/auth/me` consulta o banco:** além de validar o token, busca o usuário ativo. Um usuário desativado depois do login recebe 401 (`Sessão inválida`), mesmo com o token ainda válido. As outras rotas protegidas confiam só no token até expirar.
 - **Fuso da aplicação:** `APP_TIMEZONE` é carregado na inicialização (`utils.ConfigurarFuso`) e os timestamps das respostas saem com o offset do fuso (ex.: `-03:00`). A base de fusos vai embutida no binário (`time/tzdata`), então não depende do sistema operacional nem do container.
 - **`expira_em` em segundos:** truncado para segundos, para bater com o `exp` gravado no JWT.
+- **Regra de acesso isolada:** `utils.AvaliarAcesso(existe, ativo, permitido)` decide entre 404, 403 e permitido. É uma função pura, testada sem banco, e vai ser reaproveitada pelos cards. Nos dashboards, "permitido" quer dizer que o perfil vê ao menos um card ativo dele.
+- **Permissões nos repositories de dashboard e card:** a checagem de `perfil_cards` vai como `JOIN` nas próprias consultas (`ListarVisiveis`), sem um `PermissaoRepository` separado por enquanto. Ele entra se a checagem de um card isolado (`/cards/:codigo/dados`) precisar.
+- **Formato de `GET /dashboards`:** `dados.dashboards` é uma lista (nunca `null`), sem paginação, porque são no máximo 3 itens. Ordenada por `id`, que segue a ordem do seed: projetos, vendas e IA.
+- **`GET /dashboards/:chave` sem cards permitidos dá 403**, e não lista vazia, como pede a regra "pedir dashboard sem permissão → 403".
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -334,3 +421,4 @@ Dados do usuário dono do token e do perfil dele.
 - `PULAPI-002` — conexão com o banco (pool singleton com `Ping`), validação das variáveis obrigatórias, padrão de resposta, `GET /health` (503 se o banco cair), `.gitattributes` com LF e testes de unidade.
 - `PULAPI-003` — Docker: `Dockerfile` multi-stage (usuário sem privilégio, `HEALTHCHECK`), `.dockerignore`, `docker-compose.yml` com Postgres 16 (schema e seed na primeira subida, porta 5433) e API, `.env.example` atualizado e seção "Rodando com Docker".
 - `PULAPI-004` — autenticação: `POST /auth/login` (bcrypt, mensagem genérica, tempo constante), `GET /auth/me`, geração e validação de JWT HS256, `AuthMiddleware` (injeta `usuario_id`, `perfil_id` e `perfil`), fuso da aplicação (`APP_TIMEZONE`) e testes.
+- `PULAPI-005` — dashboards, cards e permissões: `GET /dashboards` (só dashboards com cards ativos e permitidos, com `total_cards`), `GET /dashboards/:chave` (cards visíveis, sem dados), regra de acesso 404/403 e testes.
