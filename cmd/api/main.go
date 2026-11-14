@@ -1,0 +1,116 @@
+// Pulso API — ponto de entrada.
+//
+// Nesta etapa (PULAPI-001) o main só sobe o servidor HTTP com Gin e CORS
+// e encerra de forma graciosa. Banco, rotas, autenticação, cálculos dos
+// cards e tempo real entram nas próximas etapas.
+//
+// @title          Pulso API
+// @version        1.0
+// @description    API do Pulso, o dashboard de BI da Fábrica de Software.
+// @BasePath       /
+//
+// @securityDefinitions.apikey BearerAuth
+// @in             header
+// @name           Authorization
+// @description    Informe o valor no formato "Bearer <token>".
+package main
+
+import (
+	"context"
+	"errors"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+)
+
+// origemPadrao é usada quando CORS_ORIGINS está vazio (o gin-contrib/cors
+// não aceita lista vazia).
+const origemPadrao = "http://localhost:3000"
+
+// tempoEncerramento é o prazo para as requisições em andamento terminarem
+// depois de um SIGINT/SIGTERM.
+const tempoEncerramento = 10 * time.Second
+
+func main() {
+	// Carrega o .env se existir. Em produção as variáveis vêm do ambiente
+	// (12-factor), então a ausência do arquivo não é erro.
+	if err := godotenv.Load(); err != nil {
+		log.Println("Arquivo .env não encontrado; usando as variáveis do ambiente")
+	}
+
+	// Modo do Gin via variável de ambiente ou padrão release
+	modo := os.Getenv("GIN_MODE")
+	if modo == "" {
+		modo = gin.ReleaseMode
+	}
+	gin.SetMode(modo)
+
+	// Inicia o Gin
+	r := gin.Default()
+	r.SetTrustedProxies(nil)
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     lerOrigens(os.Getenv("CORS_ORIGINS")),
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
+
+	// Porta via variável de ambiente ou padrão 8080
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	// Sobe o servidor em uma goroutine para o main poder esperar o sinal
+	go func() {
+		log.Printf("Pulso API ouvindo na porta %s", port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal("Erro ao iniciar o servidor: ", err)
+		}
+	}()
+
+	// Espera SIGINT (Ctrl+C) ou SIGTERM e encerra de forma graciosa
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+
+	log.Println("Encerrando o servidor...")
+	ctxEncerrar, cancelar := context.WithTimeout(context.Background(), tempoEncerramento)
+	defer cancelar()
+
+	if err := srv.Shutdown(ctxEncerrar); err != nil {
+		log.Println("Erro ao encerrar o servidor: ", err)
+	}
+	log.Println("Servidor encerrado")
+}
+
+// lerOrigens transforma CORS_ORIGINS (separado por vírgula) em lista,
+// ignorando espaços e itens vazios. Sem nenhuma origem, usa origemPadrao.
+func lerOrigens(valor string) []string {
+	var origens []string
+	for _, o := range strings.Split(valor, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origens = append(origens, o)
+		}
+	}
+	if len(origens) == 0 {
+		origens = []string{origemPadrao}
+	}
+	return origens
+}
