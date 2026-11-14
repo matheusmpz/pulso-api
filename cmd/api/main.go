@@ -37,6 +37,7 @@ import (
 
 	"pulso-api/db"
 	_ "pulso-api/docs" // documentação do Swagger gerada pelo swag
+	"pulso-api/middlewares"
 	"pulso-api/repositories"
 	"pulso-api/routes"
 	"pulso-api/services/calculos"
@@ -119,8 +120,10 @@ func main() {
 	}
 	gin.SetMode(modo)
 
-	// Inicia o Gin
-	r := gin.Default()
+	// Inicia o Gin com log de requisições sem o token (o WebSocket recebe o
+	// JWT na query) e recuperação de pânico
+	r := gin.New()
+	r.Use(middlewares.Logger(), gin.Recovery())
 	r.SetTrustedProxies(nil)
 
 	origens := lerOrigens(os.Getenv("CORS_ORIGINS"))
