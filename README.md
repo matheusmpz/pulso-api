@@ -64,6 +64,79 @@ O servidor encerra de forma graciosa com `Ctrl+C` (SIGINT) ou SIGTERM.
 
 O arquivo `.vscode/launch.json` traz a configuração **Pulso-Api-Debugger**, que roda `cmd/api` lendo as variáveis do `.env` (`envFile`). Requer a extensão Go e o Delve (`dlv`).
 
+## Rodando com Docker
+
+Sobe a API e um PostgreSQL já com o schema e o seed, sem instalar Go nem Postgres na máquina.
+
+### Pré-requisitos
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) ou Docker Engine com o plugin Compose (Linux). Confira com `docker compose version`.
+- Um arquivo `.env` na raiz, criado a partir do `.env.example`, com `DB_USER`, `DB_PASSWORD`, `DB_NAME` e `JWT_SECRET` preenchidos.
+
+### Arquivos
+
+| Arquivo | Para que serve |
+|---|---|
+| `Dockerfile` | Compila a API em `golang:1.25` e gera uma imagem pequena em `alpine`, rodando com usuário sem privilégio e com `HEALTHCHECK` em `/health` |
+| `.dockerignore` | O que não entra no build (`.git`, `.env`, `CLAUDE.md`, `Estrutura.md`, `.vscode`, binários, logs) |
+| `docker-compose.yml` | Serviços `db` (Postgres 16) e `api`, ligados na mesma rede |
+
+### Passo a passo
+
+```bash
+# 1. Criar o .env e preencher DB_USER, DB_PASSWORD, DB_NAME e JWT_SECRET
+cp .env.example .env
+
+# 2. Construir a imagem e subir os dois serviços
+docker compose up --build
+
+# 3. Em outro terminal, testar
+curl http://localhost:8080/health
+# {"status":"ok","banco":"ok"}
+```
+
+Como funciona:
+
+- O serviço `db` usa `DB_USER`, `DB_PASSWORD` e `DB_NAME` do `.env` para criar o usuário e o banco na **primeira** subida. Em seguida, executa `db/schema_v2.sql` e `db/seed.sql`, que ficam montados como `01-schema.sql` e `02-seed.sql`.
+- O serviço `api` só sobe depois que o banco passa no `pg_isready`. Ele lê todas as variáveis do `.env`, mas o compose força `DB_HOST=db` e `DB_PORT=5432` (nome do serviço e porta interna na rede do Docker).
+- A API fica em `localhost:<PORT>` (padrão 8080). O banco fica acessível na sua máquina em `localhost:5433`, ou na porta definida em `DB_PORTA_DOCKER`, para usar DBeaver ou `psql`.
+- Os dados ficam no volume `pulso_pgdata` e sobrevivem a `docker compose down`.
+
+### Comandos úteis
+
+| Comando | O que faz |
+|---|---|
+| `docker compose up --build` | Reconstrói a imagem da API e sobe tudo (use depois de mudar o código) |
+| `docker compose up -d` | Sobe em segundo plano (libera o terminal) |
+| `docker compose ps` | Mostra os containers e se estão `healthy` |
+| `docker compose logs -f api` | Acompanha os logs da API (`Ctrl+C` sai só dos logs) |
+| `docker compose down` | Para e remove os containers. **Mantém** os dados do banco |
+| `docker compose down -v` | Para, remove os containers **e apaga o volume** do banco (o schema e o seed rodam de novo na próxima subida) |
+| `docker compose exec db psql -U <DB_USER> -d <DB_NAME>` | Abre o `psql` dentro do container do banco |
+
+### Carregar os dados de exemplo
+
+O script `db/dev_dados_exemplo.sql` (só para desenvolvimento) será entregue numa etapa futura. Com o banco no ar, carregue-o assim, trocando `<DB_USER>` e `<DB_NAME>` pelos valores do seu `.env`:
+
+```bash
+docker compose exec -T db psql -U <DB_USER> -d <DB_NAME> < db/dev_dados_exemplo.sql
+```
+
+O `-T` desliga o terminal interativo, e isso permite redirecionar o arquivo com `<`. No PowerShell, que não aceita `<`, use:
+
+```powershell
+Get-Content db/dev_dados_exemplo.sql | docker compose exec -T db psql -U <DB_USER> -d <DB_NAME>
+```
+
+### Problemas comuns
+
+- **Porta em uso** (`Bind for 0.0.0.0:8080 failed: port is already allocated`): outro programa usa a porta. Troque `PORT` (API) ou `DB_PORTA_DOCKER` (banco) no `.env`, ou pare o programa que a ocupa. No Windows, `netstat -ano | findstr :8080` mostra o PID.
+- **O schema ou o seed não rodaram / mudei o SQL e nada aconteceu:** os scripts de `/docker-entrypoint-initdb.d` só rodam quando o volume é criado **vazio**. Se o volume já existe, eles são ignorados. Para recriar do zero (apaga os dados): `docker compose down -v` e `docker compose up --build`. O mesmo vale se você trocar `DB_USER`, `DB_PASSWORD` ou `DB_NAME` depois da primeira subida.
+- **`required variable DB_USER is missing a value`** (ou `DB_PASSWORD`, `DB_NAME`): falta preencher a variável no `.env`.
+- **A API reinicia em loop com `Configuração inválida`:** falta alguma variável obrigatória no `.env`, em geral o `JWT_SECRET`. Veja com `docker compose logs api`.
+- **A API não conecta no banco:** confira se você não está rodando a API fora do Docker com `DB_HOST=db`. Fora do compose, use `DB_HOST=localhost` e `DB_PORT=5433` para usar o banco do container.
+- **Horário dos logs em UTC:** o container usa UTC no relógio do sistema. Os cálculos de dia usam `APP_TIMEZONE`, não o fuso do container.
+
 ## Variáveis de ambiente
 
 | Variável | Obrigatória | Padrão | Descrição |
@@ -76,6 +149,7 @@ O arquivo `.vscode/launch.json` traz a configuração **Pulso-Api-Debugger**, qu
 | `DB_PASSWORD` | sim | — | Senha do banco |
 | `DB_NAME` | sim | `pulso_db` | Nome do banco |
 | `DB_SSLMODE` | não | `disable` | `sslmode` do `lib/pq` |
+| `DB_PORTA_DOCKER` | não | `5433` | Porta do Postgres do docker compose na sua máquina (só no compose) |
 | `JWT_SECRET` | sim | — | Chave de assinatura do JWT |
 | `JWT_EXPIRA_HORAS` | não | `24` | Validade do token |
 | `CORS_ORIGINS` | não | `http://localhost:3000` | Origens permitidas (separadas por vírgula), também usadas no WebSocket |
@@ -158,6 +232,11 @@ Verifica se a API está no ar e se o banco responde (ping com prazo de 2 s). Nã
 - **String de conexão:** montada no formato `chave='valor'` com escape de aspas e barras, para senhas com espaço ou aspas não quebrarem a conexão.
 - **`/health` fora do envelope:** devolve `{ status, banco }` direto, como pede a especificação. O controller recebe uma interface `Pinger` (o `*sql.DB` a satisfaz), para ser testado sem banco.
 - **Pool fechado no encerramento:** depois do `Shutdown` do servidor, o `main.go` fecha o `*sql.DB`.
+- **Docker antes da autenticação:** a etapa de Docker (`PULAPI-003`) veio antes do login a pedido do dono do projeto. A autenticação passa a ser a próxima etapa.
+- **Porta do banco no compose configurável:** o padrão é `5433:5432`, mas o lado do host pode mudar por `DB_PORTA_DOCKER`, para resolver colisão de porta sem editar o compose.
+- **`DB_PORT=5432` forçado no compose, junto com `DB_HOST=db`:** o `.env` local costuma ter a porta do Postgres da máquina, e dentro da rede do Docker a porta é sempre a interna.
+- **Credenciais do Postgres do container:** `POSTGRES_USER`, `POSTGRES_PASSWORD` e `POSTGRES_DB` são preenchidas com as mesmas `DB_USER`, `DB_PASSWORD` e `DB_NAME` do `.env`, para a API e o banco nunca divergirem. O compose para com mensagem clara se alguma faltar.
+- **Imagem final `alpine:3.21`:** versão fixa, para o build ser reproduzível. O healthcheck usa o `wget` que já vem no alpine.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -166,3 +245,4 @@ Verifica se a API está no ar e se o banco responde (ping com prazo de 2 s). Nã
 
 - `PULAPI-001` — estrutura do projeto: módulo Go, pastas, `.gitignore`, `.env.example`, debugger do VS Code, `main.go` mínimo com shutdown gracioso e README inicial.
 - `PULAPI-002` — conexão com o banco (pool singleton com `Ping`), validação das variáveis obrigatórias, padrão de resposta, `GET /health` (503 se o banco cair), `.gitattributes` com LF e testes de unidade.
+- `PULAPI-003` — Docker: `Dockerfile` multi-stage (usuário sem privilégio, `HEALTHCHECK`), `.dockerignore`, `docker-compose.yml` com Postgres 16 (schema e seed na primeira subida, porta 5433) e API, `.env.example` atualizado e seção "Rodando com Docker".
