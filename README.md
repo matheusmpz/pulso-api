@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos, os 14 de vendas e `ia-01` a `ia-09`.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). **Os 41 cards estão calculados** (15 de projetos, 14 de vendas e 12 de IA). Veja [Cards implementados](#cards-implementados).
 
 ## Stack
 
@@ -715,6 +715,9 @@ Conjuntos **P** (projetos), **A** (atividades), **H** (horas), **T** (tokens) e 
 | `ia-07` Custo por modelo | `donut` | Período | Uma fatia por `modelo` (`rotulo` e `chave` = o modelo), `valor` = custo (`R$`), chave extra `tokens`. Fatias em ordem decrescente; `total` = custo total | `consumo_tokens` |
 | `ia-08` Custo por etapa | `barras` | Período | Sempre 3 itens (Análise, Desenvolvimento, Testes): soma do custo de T por `etapa` (`R$`) | `consumo_tokens` |
 | `ia-09` Custo por tipo e complexidade | `barras_agrupadas` | Período | Base: atividades de A com algum consumo de T no período. Um item por `tipo_atividade` (só tipos com dados, na ordem do enum); séries `pequena`, `media`, `grande`; valor = custo de IA no período ÷ atividades distintas do grupo (`R$`; `null` se vazio) | `consumo_tokens` |
+| `ia-10` Intensidade de IA x desempenho | `barras_agrupadas` | Período | Base: atividades de A concluídas no período com tokens > 0. Intensidade = tokens da atividade (todo o consumo ligado a ela até `ate`, respeitando `modelo`) ÷ `estimativa_horas`; desvio = horas reais ÷ estimativa × 100. Por complexidade, as atividades são divididas em tercis de intensidade (`NTILE(3)`): 1 Baixa, 2 Média, 3 Alta. Itens = faixas; séries `pequena`, `media`, `grande`; valor = desvio médio (`%`; `null` se vazio); chaves extras `n_pequena`, `n_media`, `n_grande`. `dados.referencia` = 100 e `dados.amostra_minima` = 5 (o front marca "amostra pequena" quando `n_*` < 5). Mede **quanto** se usa IA, não **se** usa | `status_atividade`, `consumo_tokens`, `horas_lancadas` |
+| `ia-11` Peso da IA no custo | `barras_agrupadas` (empilhada) | Período | Os 10 projetos de P com maior custo total. Séries `custo_horas` (soma de `horas × custo_hora` de H no período) e `custo_ia` (custo de T no período), as duas com `pilha: "custo"`. Chave extra `percentual_ia` = `custo_ia ÷ (custo_horas + custo_ia) × 100`. Unidade `R$` | `horas_lancadas`, `consumo_tokens` |
+| `ia-12` Alertas de consumo | `lista` | Misto | Colunas `["Projeto", "Alerta", "Valor", "Quando"]`. (a) Projetos de P com quota usada ≥ 80% até `ate`: alerta "Quota em atenção", ou "Quota crítica" a partir de 100%; valor "85,3%"; quando = primeiro dia em que o acumulado passou de 80%. (b) Por projeto, dias do período com consumo acima de 3× a média dos 7 dias anteriores (com zeros; média > 0): alerta "Pico", valor "3,4x", quando = o dia. Ordem: quota crítica, quota atenção, picos por razão decrescente. Até 20 linhas; `total` = linhas antes do limite. O `alerta` do envelope continua `null` | `consumo_tokens` |
 
 Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo):
 ```json
@@ -816,6 +819,10 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - **`ia-05` com tokens e médias inteiros:** o consumo é contagem de tokens; as médias saem arredondadas para inteiro.
 - **`ia-02` e `ia-04` sem `variacao`:** a especificação só pede variação no `ia-01`.
 - **`ia-06` por sprint:** o rótulo leva o time ("Sprint 4 · Time Beta"), porque um projeto pode ter sprints de times diferentes com o mesmo número. Sem item "Outros": a especificação pede só o top 10.
+- **Texto do alerta de quota no `ia-12`:** "Quota em atenção" (80% a 100%) e "Quota crítica" (100% ou mais). A especificação chama as duas de "Quota" com gravidades diferentes; como a linha da lista é só texto, a gravidade vai no próprio rótulo.
+- **"Quando" da quota no `ia-12`:** é sempre o primeiro dia em que o acumulado passou de 80%, inclusive na quota crítica, como diz a especificação.
+- **Média dos picos do `ia-12` com dias sem consumo:** os 7 dias anteriores entram com 0 quando não houve consumo, para um projeto parado não gerar média artificialmente alta.
+- **Constantes de limiar em `services/calculos/constantes.go`:** `LimiarQuotaAtencao`, `LimiarQuotaCritica`, `FatorPico`, `JanelaMediaDias` e `AmostraMinima` ficam no código, como pede a seção 12, e são passadas aos repositories.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -841,3 +848,4 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - `PULAPI-017` — cards `ven-10` (receita mensal × meta), `ven-11` (propostas por status), `ven-12` (margem por complexidade), `ven-13` (orçado × real em horas) e `ven-14` (margem prevista × real); dashboard de vendas completo.
 - `PULAPI-018` — cards `ia-01` (custo com variação), `ia-02` (tokens), `ia-03` (quota), `ia-04` (custo por atividade concluída) e `ia-05` (consumo diário com média móvel e projeção de esgotamento).
 - `PULAPI-019` — cards `ia-06` (custo por projeto, ou por sprint com um projeto selecionado), `ia-07` (custo por modelo), `ia-08` (custo por etapa) e `ia-09` (custo médio por tipo e complexidade).
+- `PULAPI-020` — cards `ia-10` (intensidade de IA × desempenho em tercis), `ia-11` (peso da IA no custo) e `ia-12` (alertas de quota e de picos), constantes de limiar no código; os 41 cards implementados.
