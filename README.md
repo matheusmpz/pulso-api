@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Nesta etapa existe apenas o esqueleto do projeto; o servidor sobe, mas ainda não há rotas.
+> **Status:** em construção. Por enquanto existem a conexão com o banco e o `GET /health`.
 
 ## Stack
 
@@ -83,7 +83,25 @@ O arquivo `.vscode/launch.json` traz a configuração **Pulso-Api-Debugger**, qu
 | `APP_TIMEZONE` | não | `America/Sao_Paulo` | Fuso dos limites de dia |
 | `SWAGGER_ENABLED` | não | `true` | Serve o Swagger UI em `/swagger/index.html` |
 
-A validação das variáveis obrigatórias (falha na inicialização com mensagem clara) entra junto com a conexão com o banco e a autenticação.
+Se faltar alguma variável obrigatória, a API não sobe e informa quais faltam:
+
+```
+Configuração inválida: variáveis de ambiente obrigatórias não definidas: DB_HOST, JWT_SECRET
+```
+
+Se o banco não responder na inicialização (prazo de 5 s), a API também não sobe:
+
+```
+Erro ao conectar no banco (confira as variáveis DB_*): ...
+```
+
+## Testes
+
+```bash
+go test ./...
+```
+
+Os testes de unidade não precisam de banco.
 
 ## Branches
 
@@ -97,7 +115,32 @@ Commits no formato `PULAPI-XXX - Descrição simples do que foi feito`. Mudança
 
 ## Rotas
 
-Ainda não há rotas. Elas serão documentadas aqui à medida que forem entregues (método, caminho, body, resposta de sucesso e tabela de erros).
+As rotas são documentadas aqui à medida que forem entregues (método, caminho, body, resposta de sucesso e tabela de erros).
+
+Padrão de resposta das rotas da API:
+
+```json
+{ "sucesso": true,  "dados": { } }
+{ "sucesso": false, "erro": "mensagem" }
+```
+
+### Rotas públicas
+
+---
+
+#### `GET /health`
+Verifica se a API está no ar e se o banco responde (ping com prazo de 2 s). Não usa o envelope `sucesso`/`dados`, para ser lido direto por monitores e orquestradores.
+
+**Resposta de sucesso `200`**
+```json
+{ "status": "ok", "banco": "ok" }
+```
+
+**Erros**
+
+| Status | Quando | Corpo |
+|---|---|---|
+| `503` | O banco não respondeu ao ping | `{ "status": "erro", "banco": "indisponivel" }` |
 
 ---
 
@@ -109,6 +152,12 @@ Ainda não há rotas. Elas serão documentadas aqui à medida que forem entregue
 - **`main.go` com `http.Server`:** em vez de `r.Run`, o servidor usa `http.Server` com `Shutdown` para o encerramento gracioso exigido (SIGINT/SIGTERM).
 - **Padrões no `main.go`:** `GIN_MODE` vazio vira `release` e `CORS_ORIGINS` vazio vira `http://localhost:3000` (o `gin-contrib/cors` entra em pânico com lista vazia).
 - **CORS:** métodos liberados são só `GET`, `POST` e `OPTIONS`, porque a API não tem rotas de escrita além do login.
+- **`.gitattributes` com LF:** força quebra de linha LF nos arquivos, porque o `gofmt` exige LF e o `core.autocrlf` do Windows trocava por CRLF no checkout.
+- **Carregamento do `.env`:** feito só no `main.go`, antes de validar as variáveis. O `db.GetDB()` apenas lê o ambiente já carregado.
+- **Variáveis obrigatórias:** `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` e `JWT_SECRET` já são exigidas desde esta etapa, mesmo com o JWT entrando só na autenticação. `DB_PORT` e `DB_SSLMODE` têm padrão (`5432` e `disable`).
+- **String de conexão:** montada no formato `chave='valor'` com escape de aspas e barras, para senhas com espaço ou aspas não quebrarem a conexão.
+- **`/health` fora do envelope:** devolve `{ status, banco }` direto, como pede a especificação. O controller recebe uma interface `Pinger` (o `*sql.DB` a satisfaz), para ser testado sem banco.
+- **Pool fechado no encerramento:** depois do `Shutdown` do servidor, o `main.go` fecha o `*sql.DB`.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -116,3 +165,4 @@ Ainda não há rotas. Elas serão documentadas aqui à medida que forem entregue
 ## Histórico de etapas
 
 - `PULAPI-001` — estrutura do projeto: módulo Go, pastas, `.gitignore`, `.env.example`, debugger do VS Code, `main.go` mínimo com shutdown gracioso e README inicial.
+- `PULAPI-002` — conexão com o banco (pool singleton com `Ping`), validação das variáveis obrigatórias, padrão de resposta, `GET /health` (503 se o banco cair), `.gitattributes` com LF e testes de unidade.
