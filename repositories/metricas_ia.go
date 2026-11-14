@@ -14,6 +14,9 @@ type MetricasIARepository interface {
 	// ConsumoAcumulado: tokens de T até o fim do dia ate, quota do escopo
 	// e custo de T no período [de, ate].
 	ConsumoAcumulado(ctx context.Context, f models.Filtros) (models.ResumoConsumoIA, error)
+	// ConsumoNoTempo: tokens de T acumulados por dia, do primeiro consumo
+	// até ate, e a quota do escopo (proj-15).
+	ConsumoNoTempo(ctx context.Context, f models.Filtros) (models.ConsumoNoTempo, error)
 }
 
 type metricasIARepository struct {

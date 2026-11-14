@@ -35,6 +35,15 @@ type MetricasProjetosRepository interface {
 	// concluida e último evento concluida entre de e ate), agrupadas por
 	// "complexidade" (proj-10) ou "tipo" (proj-11).
 	TempoMedio(ctx context.Context, f models.Filtros, agrupamento string) ([]models.GrupoTempoMedio, error)
+	// Estouros: atividades de A com horas de H (até ate) acima da
+	// estimativa; as 5 maiores e o total (proj-12).
+	Estouros(ctx context.Context, f models.Filtros) (models.Estouros, error)
+	// HistoricoSprints: as 6 sprints mais recentes com início até ate, em
+	// ordem cronológica, com planejado e concluído (proj-13).
+	HistoricoSprints(ctx context.Context, f models.Filtros) ([]models.SprintHistorico, error)
+	// DistribuicaoHoras: horas de H no período, por desenvolvedor
+	// (escopo=projeto) ou por projeto (time e sprint), em ordem decrescente (proj-14).
+	DistribuicaoHoras(ctx context.Context, f models.Filtros) ([]models.GrupoHoras, error)
 }
 
 type metricasProjetosRepository struct {
