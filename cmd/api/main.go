@@ -37,7 +37,9 @@ import (
 
 	"pulso-api/db"
 	_ "pulso-api/docs" // documentação do Swagger gerada pelo swag
+	"pulso-api/repositories"
 	"pulso-api/routes"
+	"pulso-api/services/calculos"
 	"pulso-api/utils"
 )
 
@@ -81,6 +83,12 @@ func main() {
 	// Inicializa o banco e o pool antes de receber qualquer requisição
 	database := db.GetDB()
 
+	// Registro dos cálculos: todo card ativo do banco precisa ter um
+	// Calculador, senão banco e código estão descompassados
+	registro := calculos.NovoRegistro(database)
+	validarRegistro(registro, repositories.NewCardRepository(database))
+	servicoCalculos := calculos.NovoServico(registro)
+
 	// Modo do Gin via variável de ambiente ou padrão release
 	modo := os.Getenv("GIN_MODE")
 	if modo == "" {
@@ -101,7 +109,7 @@ func main() {
 	}))
 
 	// Registra todas as rotas passando o banco e a configuração do JWT
-	routes.Register(r, database, jwtCfg)
+	routes.Register(r, database, jwtCfg, servicoCalculos)
 	if swaggerHabilitado {
 		routes.RegisterSwagger(r)
 		log.Println("Swagger UI em /swagger/index.html")
@@ -158,4 +166,26 @@ func lerOrigens(valor string) []string {
 		origens = []string{origemPadrao}
 	}
 	return origens
+}
+
+// validarRegistro compara os cards ativos do banco com os calculadores.
+// Card ativo sem calculador encerra a aplicação; calculador sem card
+// ativo só gera aviso.
+func validarRegistro(registro calculos.Registro, cardRepo repositories.CardRepository) {
+	ctx, cancelar := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelar()
+
+	ativos, err := cardRepo.ListarCodigosAtivos(ctx)
+	if err != nil {
+		log.Fatal("Erro ao carregar os cards ativos: ", err)
+	}
+
+	faltando, sobrando := registro.Validar(ativos)
+	if len(sobrando) > 0 {
+		log.Printf("Aviso: calculadores sem card ativo no banco: %s", strings.Join(sobrando, ", "))
+	}
+	if len(faltando) > 0 {
+		log.Fatalf("Cards ativos sem Calculador (banco e código descompassados): %s", strings.Join(faltando, ", "))
+	}
+	log.Printf("Cálculos: %d cards ativos, todos com Calculador", len(ativos))
 }
