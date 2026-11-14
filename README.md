@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). **Os 41 cards estão calculados** (15 de projetos, 14 de vendas e 12 de IA). Veja [Cards implementados](#cards-implementados).
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). **Os 41 cards estão calculados** (15 de projetos, 14 de vendas e 12 de IA). As atualizações chegam em tempo real pelo [WebSocket](#tempo-real-websocket) (`GET /ws`). Veja [Cards implementados](#cards-implementados).
 
 ## Stack
 
@@ -159,7 +159,7 @@ O script roda numa transação só (entra tudo ou nada) e **se recusa a rodar** 
 | `JWT_SECRET` | sim | — | Chave de assinatura do JWT. Gere uma aleatória: `openssl rand -hex 32` |
 | `JWT_EXPIRA_HORAS` | não | `24` | Validade do token, em horas inteiras maiores que zero |
 | `CORS_ORIGINS` | não | `http://localhost:3000` | Origens permitidas (separadas por vírgula), também usadas no WebSocket |
-| `POLL_INTERVAL_MS` | não | `2000` | Intervalo do polling de eventos |
+| `POLL_INTERVAL_MS` | não | `2000` | Intervalo do polling de eventos do tempo real, em ms (100 a 3600000; valor inválido impede a API de subir) |
 | `APP_TIMEZONE` | não | `America/Sao_Paulo` | Fuso dos limites de dia e dos timestamps das respostas (ex.: `expira_em`) |
 | `SWAGGER_ENABLED` | não | `true` | Serve o Swagger UI em `/swagger/index.html` (`true`/`false`; valor inválido impede a API de subir) |
 
@@ -737,6 +737,91 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 
 ---
 
+## Tempo real (WebSocket)
+
+A carga inicial é feita pelo REST (`GET /dashboards/:chave/dados`). Depois, o WebSocket envia só as **atualizações**: quando um dado novo entra no banco, os cards afetados são recalculados e, **se o resultado mudou**, enviados aos clientes que assinaram aquele dashboard.
+
+### Como funciona
+
+```
+gerador (INSERT) ──► PostgreSQL ◄── poller (MAX(id) a cada POLL_INTERVAL_MS)
+                                        │ eventos do ciclo (ex.: horas_lancadas)
+                                        ▼
+                                       hub ── recalcula os cards cujos gatilhos incluem o evento,
+                                        │     uma vez por grupo (dashboard + filtros + perfil)
+                                        ▼
+                      clientes do grupo ◄── card_atualizado (só se o hash do resultado mudou)
+```
+
+- **Poller:** ao subir, guarda o `MAX(id)` de cada uma das 9 tabelas monitoradas, para ninguém receber uma rajada de eventos antigos. A cada `POLL_INTERVAL_MS` (padrão 2000) consulta os `MAX(id)` numa única query. Toda tabela cujo id cresceu vira um evento ([tabela de eventos](#guia-do-gerador-python)).
+- **Gatilhos:** cada card declara os eventos que podem mudar o resultado (coluna "Gatilhos" em [Cards implementados](#cards-implementados)). Vários eventos no mesmo ciclo geram **um** recálculo por card.
+- **Grupos:** conexões com o mesmo dashboard, os mesmos filtros normalizados e o mesmo perfil formam um grupo. Cada card afetado é calculado **uma vez por grupo** (até 4 ao mesmo tempo, 10 s por card) e enviado a todas as conexões dele. Sem assinantes, nada é calculado.
+- **Só o que mudou:** o hub guarda o hash do último resultado de cada card no grupo, sem o `atualizado_em`, e só envia se mudou. Ao criar um grupo, ele calcula essa base, para o primeiro evento não reenviar o que o REST acabou de mostrar.
+- **Permissões:** a assinatura usa as mesmas regras do REST. Cada conexão só recebe os cards que o seu perfil pode ver.
+
+### Handshake
+
+```
+GET /ws?token=<jwt>
+```
+
+- O token vai na **query**, porque o navegador não envia o cabeçalho `Authorization` no upgrade. Ele é validado **antes** do upgrade: sem token, ou com token inválido ou expirado, a resposta é **401**.
+- A origem precisa estar em `CORS_ORIGINS`; se não estiver, a resposta é **403**. Clientes sem cabeçalho `Origin` (que não são navegador) são aceitos, porque o token já é obrigatório.
+- **Keepalive:** o servidor envia ping a cada 30 s. Se nada chegar do cliente em 60 s (nem pong), a conexão cai. Navegadores respondem ao ping sozinhos.
+- **Expiração:** quando o token expira, o servidor envia `{"tipo":"erro","mensagem":"Sessão expirada."}` e fecha. O front deve refazer o login e reconectar.
+- **Cliente lento:** cada conexão tem uma fila de envio. Se ela encher, a conexão é fechada.
+- **Desligamento:** ao parar a API (SIGINT/SIGTERM), cada cliente recebe `{"tipo":"erro","mensagem":"Servidor encerrando."}` antes de a conexão fechar.
+
+### Mensagens
+
+**Cliente → servidor.** Uma assinatura ativa por conexão; uma nova substitui a anterior. Os `filtros` são os mesmos da query string do REST, em JSON (listas como arrays, `null` = todos):
+
+```json
+{ "tipo": "assinar", "dashboard": "projetos",
+  "filtros": { "escopo": "projeto", "id": 3, "de": "2026-10-15", "ate": "2026-11-14",
+               "tipo_projeto": ["web"], "status_projeto": null, "origem_lead": null, "modelo": null } }
+```
+
+**Servidor → cliente:**
+
+```json
+{ "tipo": "assinado", "dashboard": "projetos", "cards": ["proj-01", "proj-02", "proj-03"] }
+
+{ "tipo": "card_atualizado", "card": "proj-02",
+  "dados": { "codigo": "proj-02", "titulo": "Horas", "tipo": "numero",
+             "dados": { "valor": 79.9, "unidade": "%", "variacao": null, "detalhe": [ ... ] },
+             "alerta": null, "atualizado_em": "2026-11-14T15:33:41-03:00" } }
+
+{ "tipo": "erro", "mensagem": "Você não tem acesso a este recurso" }
+```
+
+`dados` do `card_atualizado` é o `CardResultado` completo, igual ao do REST.
+
+| Erro | Quando |
+|---|---|
+| `Dashboard não encontrado.` | Dashboard inexistente ou inativo |
+| `Você não tem acesso a este recurso` | O perfil não vê nenhum card do dashboard |
+| Mensagem de validação (ex.: `escopo inválido ...`) | Filtro inválido (mesmas regras e mensagens do REST) |
+| `Mensagem inválida: envie JSON com "tipo".` | O cliente mandou algo que não é JSON com `tipo` |
+| `Tipo de mensagem desconhecido: use "assinar".` | `tipo` diferente de `assinar` |
+| `Sessão expirada.` | O token expirou (a conexão é fechada em seguida) |
+
+### Exemplo no navegador
+
+```js
+const ws = new WebSocket(`ws://localhost:8080/ws?token=${token}`);
+ws.onopen = () => ws.send(JSON.stringify({ tipo: "assinar", dashboard: "projetos", filtros: { escopo: "projeto" } }));
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.tipo === "card_atualizado") atualizarCard(msg.card, msg.dados);
+  if (msg.tipo === "erro") console.warn(msg.mensagem);
+};
+```
+
+Se algum evento acontecer entre a carga pelo REST e a assinatura, o front pode refazer o REST logo depois do `assinado`.
+
+---
+
 ## Decisões de implementação
 
 - **Module path:** `pulso-api` (nenhum foi informado). Para renomear: `go mod edit -module <novo>` e ajuste dos imports.
@@ -823,6 +908,12 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - **"Quando" da quota no `ia-12`:** é sempre o primeiro dia em que o acumulado passou de 80%, inclusive na quota crítica, como diz a especificação.
 - **Média dos picos do `ia-12` com dias sem consumo:** os 7 dias anteriores entram com 0 quando não houve consumo, para um projeto parado não gerar média artificialmente alta.
 - **Constantes de limiar em `services/calculos/constantes.go`:** `LimiarQuotaAtencao`, `LimiarQuotaCritica`, `FatorPico`, `JanelaMediaDias` e `AmostraMinima` ficam no código, como pede a seção 12, e são passadas aos repositories.
+- **Base de hashes ao criar um grupo:** a especificação manda só enviar quando o resultado muda em relação ao último enviado. Como a carga inicial vem pelo REST, o hub calcula a base logo após a assinatura. Sem isso, o primeiro evento reenviaria todos os cards afetados, mesmo sem mudança.
+- **Hash sem `atualizado_em`:** o horário muda a cada cálculo; se entrasse no hash, todo recálculo pareceria uma mudança.
+- **Um ciclo do poller por vez:** o poller espera os recálculos do ciclo terminarem antes do próximo, então ciclos não se sobrepõem num banco lento. Os eventos do intervalo se acumulam no `MAX(id)` e entram no ciclo seguinte.
+- **Origem vazia aceita no WebSocket:** clientes que não são navegador (testes, scripts) não mandam `Origin`; o token continua obrigatório.
+- **Aviso ao desligar:** além do `Sessão expirada.` pedido, o servidor envia `Servidor encerrando.` antes de fechar no SIGINT/SIGTERM, para o front saber que deve reconectar.
+- **Escrita no WebSocket por uma goroutine só:** o gorilla/websocket aceita um escritor por vez. Mensagens e avisos passam pela goroutine de escrita da conexão; o frame de fechamento usa `WriteControl`, que é seguro em paralelo.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -849,3 +940,4 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - `PULAPI-018` — cards `ia-01` (custo com variação), `ia-02` (tokens), `ia-03` (quota), `ia-04` (custo por atividade concluída) e `ia-05` (consumo diário com média móvel e projeção de esgotamento).
 - `PULAPI-019` — cards `ia-06` (custo por projeto, ou por sprint com um projeto selecionado), `ia-07` (custo por modelo), `ia-08` (custo por etapa) e `ia-09` (custo médio por tipo e complexidade).
 - `PULAPI-020` — cards `ia-10` (intensidade de IA × desempenho em tercis), `ia-11` (peso da IA no custo) e `ia-12` (alertas de quota e de picos), constantes de limiar no código; os 41 cards implementados.
+- `PULAPI-021` — tempo real: poller dos `MAX(id)` das 9 tabelas, hub com grupos de assinatura (dashboard + filtros + perfil), recálculo só dos cards afetados e envio só do que mudou, WebSocket `GET /ws` com token na query, checagem de origem, ping/pong, expiração da sessão, cliente lento e encerramento gracioso; testes com WebSocket real.
