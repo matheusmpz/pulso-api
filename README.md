@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Por enquanto existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`) e os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), todas documentadas no [Swagger](#swagger).
+> **Status:** em construção. Por enquanto existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`) os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`) e as opções de filtro (`GET /filtros/opcoes`), todas documentadas no [Swagger](#swagger). A validação dos filtros e os conjuntos do escopo já existem e serão usados pelos cálculos dos cards.
 
 ## Stack
 
@@ -176,6 +176,20 @@ go test ./...
 ```
 
 Os testes de unidade não precisam de banco.
+
+### Testes de integração
+
+Rodam as consultas no PostgreSQL de verdade. Ficam atrás da build tag `integration` e são **pulados** se as variáveis `DB_*` não existirem. Eles leem o ambiente ou o `.env` da raiz.
+
+```bash
+# Só SELECT: confere se o SQL dos repositories é válido no banco
+go test -tags integration ./repositories/
+
+# Também confere a semântica dos conjuntos do escopo com um cenário de teste.
+# Insere dados DENTRO DE UMA TRANSAÇÃO e faz ROLLBACK: nada fica gravado,
+# mas as sequências (ids) avançam. Prefira um banco descartável.
+PULSO_TESTE_FIXTURE=1 go test -tags integration ./repositories/
+```
 
 ## Swagger
 
@@ -410,6 +424,83 @@ O dashboard e a lista dos cards que o perfil pode ver, **sem os dados calculados
 
 ---
 
+### Filtros, escopo e período
+
+Os filtros vão na **query string** das rotas de dados dos cards (próximas etapas) e, no WebSocket, no objeto `filtros`. Eles são validados e **normalizados** antes de calcular: padrões aplicados, listas sem repetição e ordenadas, e parâmetros que não valem para o dashboard descartados. O filtro normalizado é a chave de cache e de assinatura do WebSocket.
+
+| Parâmetro | Tipo | Valores | Vale em | Padrão |
+|---|---|---|---|---|
+| `escopo` | enum | `projeto`, `time`, `sprint` | projetos, ia | `projeto` |
+| `id` | inteiro positivo | id do projeto, do time ou da sprint; vazio = todos | projetos, ia | vazio |
+| `de`, `ate` | `AAAA-MM-DD` | período | todos | últimos 30 dias, contando hoje |
+| `tipo_projeto` | lista | `web`, `mobile`, `integracao`, `api`, `outro` | todos (em vendas, só nos cards de orçamento/venda) | todos |
+| `status_projeto` | lista | `em_andamento`, `concluido`, `pausado`, `cancelado` | projetos, ia | todos |
+| `origem_lead` | lista | texto livre (valores de `oportunidades.origem`) | vendas | todos |
+| `modelo` | lista | texto livre (valores de `consumo_tokens.modelo`) | ia | todos |
+
+Listas aceitam valores separados por vírgula (`tipo_projeto=web,api`) e/ou o parâmetro repetido (`tipo_projeto=web&tipo_projeto=api`). Exemplo:
+
+```
+GET /dashboards/projetos/dados?escopo=time&id=2&de=2026-10-01&ate=2026-10-31&tipo_projeto=web,api
+```
+
+**Período padrão:** sem `de` nem `ate`, os 30 dias terminados hoje (no fuso `APP_TIMEZONE`). Só com `de`: de `de` até hoje. Só com `ate`: os 30 dias terminados em `ate`.
+
+**Validação (400, com mensagem em português):** escopo ou enum inválido, `id` que não seja inteiro positivo, data fora do formato `AAAA-MM-DD` ou inexistente (ex.: `2026-02-30`), `de` maior que `ate`, intervalo maior que 5 anos, `escopo=sprint` sem `id`, sprint inexistente, mais de 50 valores numa lista ou valor com mais de 100 caracteres. Parâmetros que não valem para o dashboard são **ignorados**, mesmo se inválidos (ex.: `escopo=xyz` em vendas).
+
+**Escopo** (dashboards projetos e ia):
+
+| Conjunto | `escopo=projeto` | `escopo=time` | `escopo=sprint` |
+|---|---|---|---|
+| **P** projetos (sempre filtrados por `tipo_projeto` e `status_projeto`) | o projeto `id` (todos, se vazio) | projetos com ao menos uma atividade do time `id` (com qualquer atividade, se vazio) | projetos com ao menos uma atividade da sprint `id` |
+| **A** atividades (de projetos de P, criadas até o fim do dia `ate`) | todas | do time `id` (todas, se vazio) | da sprint `id` |
+| **H** horas | lançamentos das atividades de A | idem | idem |
+| **T** tokens (filtrados por `modelo`) | todo o consumo dos projetos de P, inclusive sem atividade | consumo de desenvolvedores do time `id`, em projetos de P | consumo ligado às atividades de A |
+| **Quota** | soma de `limite_tokens` dos projetos de P | idem | idem |
+
+Em `escopo=time`, a quota de um projeto é compartilhada entre os times que trabalham nele. Por isso o percentual de quota por time é **aproximado**: compara o consumo de um time com a quota inteira dos projetos.
+
+**Regra de período:** cada card declara um modo.
+- **Acumulado:** considera tudo até o fim do dia `ate` e ignora `de` (progresso, horas contra estimativa, quota).
+- **Período:** considera eventos entre o início do dia `de` e o fim do dia `ate` (custo no período, vendas fechadas).
+- Em `escopo=sprint`, `de` e `ate` passam a ser o início e o fim da sprint `id`, qualquer que seja o valor enviado.
+- **Período anterior** (para as variações): o intervalo de mesma duração que termina no dia anterior a `de`. Ex.: 11/11 a 20/11 → 01/11 a 10/11.
+
+---
+
+#### `GET /filtros/opcoes`
+Opções para preencher os filtros do front. Em cada sprint, `atual` indica se hoje (no fuso do app) está entre `inicio` e `fim`, inclusive; o front usa isso para pré-selecionar a sprint atual. Listas sem dados vêm vazias (`[]`).
+
+**Resposta de sucesso `200`** (resumida)
+```json
+{
+  "sucesso": true,
+  "dados": {
+    "tipos_projeto": [ { "valor": "web", "rotulo": "Web" }, { "valor": "integracao", "rotulo": "Integração" } ],
+    "status_projeto": [ { "valor": "em_andamento", "rotulo": "Em andamento" } ],
+    "origens": ["indicacao", "site"],
+    "modelos": ["modelo-a", "modelo-b"],
+    "projetos": [ { "id": 1, "nome": "Portal", "tipo": "web", "status": "em_andamento" } ],
+    "times": [ { "id": 1, "nome": "Time Beta" } ],
+    "sprints": [
+      { "id": 2, "time_id": 1, "time_nome": "Time Beta", "numero": 2,
+        "inicio": "2026-11-08", "fim": "2026-11-14", "atual": true }
+    ]
+  }
+}
+```
+
+Ordem: origens e modelos em ordem alfabética, projetos e times por nome, sprints por time e início.
+
+**Erros**
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `401` | Erros de token | — |
+| `500` | Erro no banco | `Erro interno. Tente novamente mais tarde.` |
+
+---
+
 ## Decisões de implementação
 
 - **Module path:** `pulso-api` (nenhum foi informado). Para renomear: `go mod edit -module <novo>` e ajuste dos imports.
@@ -445,6 +536,15 @@ O dashboard e a lista dos cards que o perfil pode ver, **sem os dados calculados
 - **`/swagger` redireciona para `/swagger/index.html`:** o `gin-swagger` só responde em `/swagger/*any`. O redirecionamento evita um 404 em quem digita só `/swagger`.
 - **Swagger UI com `PersistAuthorization`:** o token informado em **Authorize** continua salvo ao recarregar a página.
 - **`SWAGGER_ENABLED` aceita `true/false`, `1/0` e `sim/nao`.** Um valor diferente impede a API de subir, em vez de ser ignorado em silêncio.
+- **Período padrão = 30 dias contando hoje:** "últimos 30 dias até hoje" foi interpretado como `de = hoje − 29`, ou seja, 30 dias no total, incluindo hoje.
+- **Parâmetros que não valem para o dashboard são ignorados antes da validação:** `escopo=xyz` em vendas não dá 400. Assim o front pode mandar o mesmo conjunto de filtros para qualquer dashboard.
+- **Sprint inexistente em `escopo=sprint` dá 400** (`Sprint N não encontrada.`), porque sem a sprint não há período. Já um projeto ou time inexistente em `id` não é erro: devolve dados vazios, já que "dado vazio nunca é erro".
+- **Limites nas listas:** no máximo 50 valores por filtro e 100 caracteres por valor, para evitar consultas gigantes com texto livre (`origem_lead`, `modelo`).
+- **Rótulos de `status_projeto`:** a especificação não os define. Foram usados "Em andamento", "Concluído", "Pausado" e "Cancelado". Todos os rótulos de enums ficam em `models/enums.go`.
+- **Conjuntos do escopo como CTEs (`repositories.CTEsEscopo`):** `p`, `a`, `h`, `t` e `quota` são montados uma vez, com placeholders `$n` numerados por um `ConsultaSQL` compartilhado com a consulta do card. O texto SQL só sai de trechos fixos escolhidos por `switch` (whitelist), e toda entrada vai como parâmetro (listas com `pq.Array` e cast para o enum). As CTEs não aplicam a regra de período: cada card filtra `h` e `t` pelo modo que usa.
+- **`escopo=time` sem `id`:** P são os projetos com ao menos uma atividade (de qualquer time), e T é o consumo de qualquer desenvolvedor nesses projetos.
+- **Datas como `models.Data`:** um dia do calendário (meia-noite no fuso do app) que vira `"AAAA-MM-DD"` no JSON. Colunas `DATE` lidas do banco são convertidas sem trocar de dia (`utils.DataDoBanco`).
+- **Teste de semântica com transação e rollback:** o cenário dos conjuntos do escopo é inserido numa transação desfeita no final. Mesmo assim, só roda com `PULSO_TESTE_FIXTURE=1`, porque as sequências avançam.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -457,3 +557,4 @@ O dashboard e a lista dos cards que o perfil pode ver, **sem os dados calculados
 - `PULAPI-004` — autenticação: `POST /auth/login` (bcrypt, mensagem genérica, tempo constante), `GET /auth/me`, geração e validação de JWT HS256, `AuthMiddleware` (injeta `usuario_id`, `perfil_id` e `perfil`), fuso da aplicação (`APP_TIMEZONE`) e testes.
 - `PULAPI-005` — dashboards, cards e permissões: `GET /dashboards` (só dashboards com cards ativos e permitidos, com `total_cards`), `GET /dashboards/:chave` (cards visíveis, sem dados), regra de acesso 404/403 e testes.
 - `PULAPI-006` — Swagger: `docs/` gerado pelo swag com as rotas existentes, Swagger UI em `/swagger/index.html` (com redirecionamento de `/swagger`), autenticação Bearer no **Authorize**, `SWAGGER_ENABLED` e instruções para regenerar.
+- `PULAPI-007` — filtros e escopo: parse, validação e normalização dos filtros (padrões, enums, datas, limite de 5 anos, sprint), período anterior, conjuntos do escopo P/A/H/T/quota em SQL, `GET /filtros/opcoes`, testes de unidade e de integração.
