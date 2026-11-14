@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos e os 14 de vendas.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos, os 14 de vendas e `ia-01` a `ia-05`.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
 
 ## Stack
 
@@ -702,6 +702,16 @@ Conjuntos **P** (projetos), **A** (atividades), **H** (horas), **T** (tokens) e 
 | `ven-13` Orçado x real (horas) | `barras_agrupadas` | Período | Base: orçamentos com venda fechada no período. Por `tipo_projeto` do orçamento (só tipos com dados): `estimado` = soma de `horas_estimadas`; `real` = horas lançadas até `ate` nos projetos ligados (`projetos.orcamento_id`). Unidade `h` | `horas_lancadas`, `venda_fechada` |
 | `ven-14` Margem prevista x real | `barras_agrupadas` com pilha | Período | Mesma base do `ven-13`, por `tipo_projeto`. `previsto` (pilha `previsto`) = soma de `valor × margem_prevista ÷ 100`; `margem_real` e `custo_ia` (pilha `real`): `margem_real` = soma de `vendas.valor` − custo das horas − custo de IA dos projetos ligados (até `ate`), e `custo_ia` = custo de IA desses projetos. A altura da pilha `real` é a margem real sem o custo de IA. `margem_real` pode ser negativa. Unidade `R$` | `horas_lancadas`, `consumo_tokens`, `venda_fechada` |
 
+**Dashboard ia.** Usa os conjuntos P, A e T e a quota do escopo. `modelo` filtra o consumo (T); `origem_lead` é ignorado.
+
+| Card | Tipo | Período | Cálculo | Gatilhos |
+|---|---|---|---|---|
+| `ia-01` Custo de IA | `numero` | Período | `valor` = soma de `custo` de T no período (`R$`). `variacao` contra o período anterior (`null` se o anterior for 0) | `consumo_tokens` |
+| `ia-02` Tokens consumidos | `numero` | Período | `valor` = soma de `tokens_entrada + tokens_saida` de T no período. `detalhe`: Entrada e Saída (`tokens`) | `consumo_tokens` |
+| `ia-03` Quota consumida | `radial` | Acumulado | `valor` = tokens de T até `ate` ÷ quota × 100 (`null` se a quota for 0); `meta` = 100. `detalhe`: Consumido e Limite (`tokens`) | `consumo_tokens` |
+| `ia-04` Custo por atividade concluída | `numero` | Período | Atividades de A concluídas no período (status atual `concluida` e último evento `concluida` no período): custo de IA de **todo** o consumo ligado a elas até `ate` (de qualquer desenvolvedor, respeitando `modelo`) ÷ quantidade (`R$`; `null` se nenhuma). `detalhe`: Atividades concluídas e Custo total | `consumo_tokens`, `status_atividade` |
+| `ia-05` Consumo diário e projeção | `area` | Período | Séries `consumo` (tokens de T por dia, de `de` a `ate`, com zeros) e `media_movel` (média dos 7 dias terminados naquele dia, usando dias anteriores a `de`). `extra.projecao` = `{media_diaria, restante, dias_restantes, data_esgotamento, esgotada}`: `media_diaria` = média dos 7 dias até `ate`; `restante` = quota − tokens acumulados até `ate` (mínimo 0); `dias_restantes` = piso de `restante ÷ media_diaria` (`null` se a média ou a quota for 0); `data_esgotamento` = `ate` + `dias_restantes`; `esgotada` = `restante` 0 com quota > 0. Tokens e médias em inteiros | `consumo_tokens` |
+
 Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo):
 ```json
 {
@@ -798,6 +808,9 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - **`ven-10` em meses inteiros:** a receita de um mês conta todas as vendas daquele mês, mesmo fora dos dias exatos de `de` e `ate` (ex.: `de=2026-08-15` inclui as vendas desde 01/08).
 - **Valores em R$ em texto no padrão brasileiro** (`FormatarMoeda`): "R$ 1.234,56", usado no `extra` do `ven-12`.
 - **`ven-13` e `ven-14` agregam horas, custo das horas e custo de IA por projeto antes de juntar** com os orçamentos, para os totais não inflarem.
+- **`ia-04` soma todo o consumo ligado às atividades concluídas**, de qualquer desenvolvedor, respeitando só o filtro de `modelo`. Em `escopo=time`, o custo de uma atividade do time inclui o consumo de quem não é do time, porque a especificação fala em "todo o consumo ligado a elas".
+- **`ia-05` com tokens e médias inteiros:** o consumo é contagem de tokens; as médias saem arredondadas para inteiro.
+- **`ia-02` e `ia-04` sem `variacao`:** a especificação só pede variação no `ia-01`.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -821,3 +834,4 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - `PULAPI-015` — base do dashboard vendas (CTEs `op`/`orc`/`vd`, `tipo_projeto` só nos cards de orçamento e venda) e cards `ven-01` (receita com variação), `ven-02` (conversão), `ven-03` (ticket médio), `ven-04` (ciclo de venda) e `ven-05` (funil).
 - `PULAPI-016` — cards `ven-06` (pipeline em aberto, bruto e ponderado), `ven-07` (motivos de perda), `ven-08` (origem dos leads com conversão) e `ven-09` (reuniões até fechar).
 - `PULAPI-017` — cards `ven-10` (receita mensal × meta), `ven-11` (propostas por status), `ven-12` (margem por complexidade), `ven-13` (orçado × real em horas) e `ven-14` (margem prevista × real); dashboard de vendas completo.
+- `PULAPI-018` — cards `ia-01` (custo com variação), `ia-02` (tokens), `ia-03` (quota), `ia-04` (custo por atividade concluída) e `ia-05` (consumo diário com média móvel e projeção de esgotamento).
