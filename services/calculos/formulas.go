@@ -52,3 +52,21 @@ func Variacao(atual, anterior float64) *float64 {
 func FormatarPercentual(v float64) string {
 	return strings.Replace(strconv.FormatFloat(Arredondar(v, CasasPercentual), 'f', 1, 64), ".", ",", 1) + "%"
 }
+
+// FormatarMoeda formata um valor em reais no padrão brasileiro, com
+// separador de milhar: 1234.5 → "R$ 1.234,50".
+func FormatarMoeda(v float64) string {
+	sinal := ""
+	if v < 0 {
+		sinal, v = "-", -v
+	}
+	texto := strconv.FormatFloat(Arredondar(v, CasasValor), 'f', 2, 64)
+	inteiro, decimal := texto[:len(texto)-3], texto[len(texto)-2:]
+	var grupos []string
+	for len(inteiro) > 3 {
+		grupos = append([]string{inteiro[len(inteiro)-3:]}, grupos...)
+		inteiro = inteiro[:len(inteiro)-3]
+	}
+	grupos = append([]string{inteiro}, grupos...)
+	return sinal + "R$ " + strings.Join(grupos, ".") + "," + decimal
+}

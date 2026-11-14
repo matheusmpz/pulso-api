@@ -61,15 +61,20 @@ func NovoRegistro(db *sql.DB) Registro {
 	reg.Registrar(NovoConsumoNoTempo(ia))               // proj-15
 
 	vendas := repositories.NewMetricasVendasRepository(db)
-	reg.Registrar(NovoReceitaFechada(vendas))    // ven-01
-	reg.Registrar(NovoTaxaConversao(vendas))     // ven-02
-	reg.Registrar(NovoTicketMedio(vendas))       // ven-03
-	reg.Registrar(NovoCicloVenda(vendas))        // ven-04
-	reg.Registrar(NovoFunilVendas(vendas))       // ven-05
-	reg.Registrar(NovoPipeline(vendas))          // ven-06
-	reg.Registrar(NovoMotivosPerda(vendas))      // ven-07
-	reg.Registrar(NovoOrigemLeads(vendas))       // ven-08
-	reg.Registrar(NovoReunioesAteFechar(vendas)) // ven-09
+	reg.Registrar(NovoReceitaFechada(vendas))     // ven-01
+	reg.Registrar(NovoTaxaConversao(vendas))      // ven-02
+	reg.Registrar(NovoTicketMedio(vendas))        // ven-03
+	reg.Registrar(NovoCicloVenda(vendas))         // ven-04
+	reg.Registrar(NovoFunilVendas(vendas))        // ven-05
+	reg.Registrar(NovoPipeline(vendas))           // ven-06
+	reg.Registrar(NovoMotivosPerda(vendas))       // ven-07
+	reg.Registrar(NovoOrigemLeads(vendas))        // ven-08
+	reg.Registrar(NovoReunioesAteFechar(vendas))  // ven-09
+	reg.Registrar(NovoReceitaMensal(vendas))      // ven-10
+	reg.Registrar(NovoStatusPropostas(vendas))    // ven-11
+	reg.Registrar(NovoMargemComplexidade(vendas)) // ven-12
+	reg.Registrar(NovoOrcadoReal(vendas))         // ven-13
+	reg.Registrar(NovoMargemPrevistaReal(vendas)) // ven-14
 	return reg
 }
 

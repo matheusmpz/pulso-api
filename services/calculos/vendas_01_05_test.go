@@ -9,16 +9,20 @@ import (
 
 // repoVendasFalso devolve números fixos e registra os filtros recebidos.
 type repoVendasFalso struct {
-	receitas  map[string]models.ResumoReceita // chave: "de|ate"
-	conversao models.ResumoConversao
-	ciclo     models.ResumoCiclo
-	funil     []models.EtapaFunil
-	pipeline  []models.EtapaPipeline
-	motivos   []models.GrupoContagem
-	origens   []models.OrigemLeads
-	reunioes  []models.ReunioesDesfecho
-	recebidos *[]models.Filtros
-	err       error
+	receitas   map[string]models.ResumoReceita // chave: "de|ate"
+	conversao  models.ResumoConversao
+	ciclo      models.ResumoCiclo
+	funil      []models.EtapaFunil
+	pipeline   []models.EtapaPipeline
+	motivos    []models.GrupoContagem
+	origens    []models.OrigemLeads
+	reunioes   []models.ReunioesDesfecho
+	mensal     []models.MesReceita
+	propostas  models.StatusPropostas
+	margens    []models.MargemComplexidade
+	orcadoReal []models.OrcadoRealTipo
+	recebidos  *[]models.Filtros
+	err        error
 }
 
 func (r repoVendasFalso) anota(f models.Filtros) {

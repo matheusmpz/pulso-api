@@ -75,3 +75,15 @@ func TestFormatarPercentual(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatarMoeda(t *testing.T) {
+	casos := map[float64]string{
+		300: "R$ 300,00", 1234.5: "R$ 1.234,50", 1234567.891: "R$ 1.234.567,89",
+		0: "R$ 0,00", 999.999: "R$ 1.000,00", -50.5: "-R$ 50,50",
+	}
+	for v, esperado := range casos {
+		if got := FormatarMoeda(v); got != esperado {
+			t.Errorf("FormatarMoeda(%v): esperado %q, obtido %q", v, esperado, got)
+		}
+	}
+}
