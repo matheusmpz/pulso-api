@@ -3,7 +3,9 @@ package utils
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // VariaveisObrigatorias são as variáveis sem as quais a API não sobe.
@@ -52,4 +54,18 @@ func EnvOuPadrao(nome, padrao string) string {
 		return v
 	}
 	return padrao
+}
+
+// ParseIntervaloMs converte um número de milissegundos (ex.:
+// POLL_INTERVAL_MS) em duração. Vazio usa o padrão; aceita de 100 ms a 1 h.
+func ParseIntervaloMs(valor string, padraoMs int) (time.Duration, error) {
+	valor = strings.TrimSpace(valor)
+	if valor == "" {
+		return time.Duration(padraoMs) * time.Millisecond, nil
+	}
+	ms, err := strconv.Atoi(valor)
+	if err != nil || ms < 100 || ms > 3600000 {
+		return 0, fmt.Errorf("valor inválido (%q): use um número de milissegundos entre 100 e 3600000", valor)
+	}
+	return time.Duration(ms) * time.Millisecond, nil
 }

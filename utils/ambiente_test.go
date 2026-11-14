@@ -87,3 +87,17 @@ func TestEnvOuPadrao(t *testing.T) {
 		t.Errorf("esperado padrao, obtido %q", v)
 	}
 }
+
+func TestParseIntervaloMs(t *testing.T) {
+	if d, err := ParseIntervaloMs("", 2000); err != nil || d.Milliseconds() != 2000 {
+		t.Errorf("vazio deveria usar o padrão: %v %v", d, err)
+	}
+	if d, err := ParseIntervaloMs(" 500 ", 2000); err != nil || d.Milliseconds() != 500 {
+		t.Errorf("500: %v %v", d, err)
+	}
+	for _, ruim := range []string{"abc", "50", "0", "-1", "3600001", "1.5"} {
+		if _, err := ParseIntervaloMs(ruim, 2000); err == nil {
+			t.Errorf("%q deveria dar erro", ruim)
+		}
+	}
+}
