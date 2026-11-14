@@ -116,17 +116,23 @@ Como funciona:
 
 ### Carregar os dados de exemplo
 
-O script `db/dev_dados_exemplo.sql` (só para desenvolvimento) será entregue numa etapa futura. Com o banco no ar, carregue-o assim, trocando `<DB_USER>` e `<DB_NAME>` pelos valores do seu `.env`:
+O script `db/dev_dados_exemplo.sql` (**só para desenvolvimento**) cria dados fictícios e coerentes dos últimos ~90 dias, para todos os cards terem o que mostrar. Veja o que ele cria em [Dados de exemplo](#dados-de-exemplo).
+
+Com o banco no ar e **ainda sem dados**, carregue-o trocando `<DB_USER>` e `<DB_NAME>` pelos valores do seu `.env`:
 
 ```bash
-docker compose exec -T db psql -U <DB_USER> -d <DB_NAME> < db/dev_dados_exemplo.sql
+docker compose exec -T db psql -v ON_ERROR_STOP=1 -U <DB_USER> -d <DB_NAME> < db/dev_dados_exemplo.sql
 ```
 
 O `-T` desliga o terminal interativo, e isso permite redirecionar o arquivo com `<`. No PowerShell, que não aceita `<`, use:
 
 ```powershell
-Get-Content db/dev_dados_exemplo.sql | docker compose exec -T db psql -U <DB_USER> -d <DB_NAME>
+Get-Content db/dev_dados_exemplo.sql | docker compose exec -T db psql -v ON_ERROR_STOP=1 -U <DB_USER> -d <DB_NAME>
 ```
+
+Também dá para rodar pelo **DBeaver**: abra o arquivo num editor SQL da conexão "Pulso (Docker)" e use **Executar script** (`Alt+X`).
+
+O script roda numa transação só (entra tudo ou nada) e **se recusa a rodar** se o banco já tiver dados de negócio. Para recarregar do zero, use `docker compose down -v` e `docker compose up -d db`; o schema e o seed rodam de novo, e aí você carrega o script.
 
 ### Problemas comuns
 
@@ -219,6 +225,49 @@ swag init -g cmd/api/main.go -o docs
 ```
 
 O `docs/` é versionado e entra na imagem Docker, então o Docker não precisa do `swag` para compilar.
+
+## Dados de exemplo
+
+`db/dev_dados_exemplo.sql` cria um cenário fictício, com datas relativas a **hoje** (fuso `America/Sao_Paulo`), para desenvolver e demonstrar os cards. Ele também é a **referência para o gerador Python**: mostra a ordem dos INSERTs, as regras de integridade e o formato esperado dos dados, com comentários explicando cada bloco.
+
+| Área | O que tem |
+|---|---|
+| Cadastros | 3 clientes; Time Alfa e Time Beta, com 3 desenvolvedores cada |
+| Funil | 20 oportunidades em 4 origens (`site`, `indicacao`, `linkedin`, `evento`): 5 ganhas, 7 perdidas (4 motivos) e 8 em aberto em várias etapas; 29 reuniões |
+| Orçamentos | 16, alguns com versão 2 (renegociação); status pendente, em revisão, aprovada e recusada, e um sem nenhum evento (fica "pendente" por padrão) |
+| Projetos e vendas | 5 projetos (2 web, mobile, api, integracao; em andamento, concluído e pausado), cada um com sua venda e ligado ao orçamento ganho |
+| Sprints | 6 de 14 dias por time: 4 passadas, a atual e uma futura |
+| Atividades | 37, com todos os tipos e complexidades: concluídas, em andamento, abertas, sem nenhum evento (backlog e sprint futura) e várias estourando a estimativa (até 180%) |
+| Horas | ~150 lançamentos nas três etapas, com o custo/hora de cada desenvolvedor |
+| IA | ~250 consumos em 3 modelos (`claude-sonnet`, `gemini-flash`, `gpt-4o-mini`), ligados às atividades e também sem atividade; quota dos projetos em 144% (crítica), 84% (atenção) e abaixo de 80%; dois picos de consumo |
+| Metas | Meta de receita do mês atual e dos 2 anteriores |
+
+### Guia do gerador Python
+
+O gerador simula os outros grupos inserindo dados continuamente. Ele **nunca chama esta API**. As regras completas estão no topo de `db/dev_dados_exemplo.sql`, e o schema está em [`db/schema_v2.sql`](db/schema_v2.sql). Resumo:
+
+1. **Só `INSERT`**, nunca `UPDATE` nem `DELETE`. Mudança de estado é uma linha nova em `atividade_eventos`, `oportunidade_eventos` ou `orcamento_eventos`. O estado atual é o do último evento (maior `ocorrido_em`; empate, maior `id`). Sem evento, vale o estado inicial: atividade `aberta`, oportunidade `lead`, orçamento `pendente`.
+2. **Autocommit ou transações curtas.** A API detecta dado novo pelo `MAX(id)` de cada tabela, a cada `POLL_INTERVAL_MS`. Uma transação longa pode tornar visível um id menor depois de um maior já lido, e esse evento se perde.
+3. **Ordem dos INSERTs:** clientes → times → desenvolvedores; oportunidades → eventos do funil e reuniões; orçamentos → eventos de status; projetos (com `orcamento_id` do orçamento ganho) → vendas; sprints → atividades → eventos de atividade; horas e tokens.
+4. **Chaves compostas:** a sprint da atividade é do mesmo time; horas e tokens com atividade são do mesmo projeto da atividade. `consumo_tokens.atividade_id` pode ser nulo (uso geral no projeto).
+5. `motivo_perda` existe **se e somente se** a etapa é `perdida`. `ganha` e `perdida` são finais.
+6. Orçamento é único por (oportunidade, versão): renegociar é criar uma nova versão. Uma venda por orçamento; `projetos.orcamento_id` é único.
+7. **Datas coerentes:** evento depois da criação da entidade, horas e tokens dentro do período de trabalho da atividade, nada no futuro. `registros_horas.horas` vai de 0 a 24.
+8. **Não grave** nas tabelas de configuração (`dashboards`, `cards`, `perfis`, `usuarios`, `perfil_cards`, `funil_etapas`).
+
+Cada `INSERT` numa tabela monitorada vira um evento de tempo real e atualiza os cards afetados:
+
+| Tabela | Evento |
+|---|---|
+| `registros_horas` | `horas_lancadas` |
+| `atividade_eventos` | `status_atividade` |
+| `atividades` | `atividade_criada` |
+| `consumo_tokens` | `consumo_tokens` |
+| `vendas` | `venda_fechada` |
+| `oportunidade_eventos` | `etapa_oportunidade` |
+| `reunioes` | `reuniao_registrada` |
+| `orcamentos` | `orcamento_emitido` |
+| `orcamento_eventos` | `orcamento_status` |
 
 ## Branches
 
@@ -665,6 +714,11 @@ Convenções: uma razão com denominador 0 devolve `null` (o front mostra "—")
 - **Card de dashboard inativo dá 404**, mesmo se o card estiver ativo.
 - **`alerta: null` também nos cards com erro:** o envelope sempre traz `alerta`; `dados` e `atualizado_em` só aparecem no sucesso, e `erro` só na falha.
 - **`models.Data` lê e grava `"AAAA-MM-DD"` em JSON**, para os filtros aplicados poderem ser lidos de volta (ex.: no WebSocket).
+- **Dados de exemplo antes dos cards:** o `dev_dados_exemplo.sql` entrou na `PULAPI-009`, antes dos grupos de cards, para cada card ser conferido contra dados reais desde a sua etapa.
+- **Dados de exemplo com 5 projetos e 37 atividades** (a especificação pede no mínimo 4 e ~25): um projeto concluído e um pausado exercitam o filtro de status, e 6 sprints por time preenchem o histórico de 6 sprints do `proj-13`.
+- **Dados de exemplo determinísticos:** valores fixos e variação calculada a partir dos ids, sem `random()`. Assim, duas cargas no mesmo dia produzem os mesmos números, o que facilita comparar os cards.
+- **Script de exemplo com trava e transação única:** recusa rodar se já houver clientes, times, oportunidades ou projetos. Usa tabelas temporárias de apoio (`_opp`, `_atv`...), que somem no `COMMIT`; nas tabelas reais, só `INSERT`.
+- **Preço dos modelos fictício** (R$ por milhão de tokens), só para os custos terem ordens de grandeza diferentes entre os modelos.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -679,3 +733,4 @@ Convenções: uma razão com denominador 0 devolve `null` (o front mostra "—")
 - `PULAPI-006` — Swagger: `docs/` gerado pelo swag com as rotas existentes, Swagger UI em `/swagger/index.html` (com redirecionamento de `/swagger`), autenticação Bearer no **Authorize**, `SWAGGER_ENABLED` e instruções para regenerar.
 - `PULAPI-007` — filtros e escopo: parse, validação e normalização dos filtros (padrões, enums, datas, limite de 5 anos, sprint), período anterior, conjuntos do escopo P/A/H/T/quota em SQL, `GET /filtros/opcoes`, testes de unidade e de integração.
 - `PULAPI-008` — base dos cálculos: interface `Calculador`, registro dos 41 cards (com gatilhos e cálculo pendente), validação do registro na inicialização, serviço de cálculo (4 em paralelo, 10 s por card, isolamento de falhas), formatos de `dados` por tipo, `GET /dashboards/:chave/dados`, `GET /cards/:codigo/dados` e testes.
+- `PULAPI-009` — dados de exemplo: `db/dev_dados_exemplo.sql` (~90 dias de funil, orçamentos, vendas, projetos, sprints, atividades, horas, tokens e metas, com trava e transação única) e guia do gerador Python no README.
