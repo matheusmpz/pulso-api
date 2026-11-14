@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos (`proj-01` a `proj-15`).** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos e `ven-01` a `ven-05`.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
 
 ## Stack
 
@@ -683,6 +683,16 @@ Conjuntos **P** (projetos), **A** (atividades), **H** (horas), **T** (tokens) e 
 | `proj-14` Distribuição de horas | `barras` (horizontal) | Período | Horas de H com `trabalhado_em` entre `de` e `ate`: por desenvolvedor em `escopo=projeto`; por projeto em `time` e `sprint`. Os 10 maiores mais um item "Outros" (soma do resto, só se houver mais de 10). Unidade `h` | `horas_lancadas` |
 | `proj-15` Custo de IA no tempo | `area` | Acumulado | Série `consumo` = tokens de T acumulados por dia (`x` = data), do primeiro consumo até `ate`. `referencia` = `{nome: "Limite de tokens", valor: quota}` (`null` se a quota for 0). Unidade `tokens` | `consumo_tokens` |
 
+**Dashboard vendas.** `escopo`, `id` e `status_projeto` são ignorados. `origem_lead` vale em todos os cards. `tipo_projeto` (do orçamento) vale só nos cards que usam orçamentos ou vendas (`ven-01`, `03`, `06`, `10` a `14`) e **não** nos de funil (`ven-02`, `04`, `05`, `07`, `08`, `09`), porque um lead ainda não tem tipo. O estado de uma oportunidade é a etapa do último evento; `ganha` e `perdida` são finais.
+
+| Card | Tipo | Período | Cálculo | Gatilhos |
+|---|---|---|---|---|
+| `ven-01` Receita fechada | `numero` | Período | `valor` = soma de `vendas.valor` com `fechada_em` no período (`R$`). `variacao` contra o período anterior de mesma duração (`null` se o anterior for 0). `detalhe`: Vendas (quantidade) | `venda_fechada` |
+| `ven-02` Taxa de conversão | `numero` | Período | Oportunidades cujo estado final (`ganha` ou `perdida`) ocorreu no período: ganhas ÷ (ganhas + perdidas) × 100 (`null` se nenhuma). Em aberto não entram. `detalhe`: Ganhas e Perdidas | `etapa_oportunidade` |
+| `ven-03` Ticket médio | `numero` | Período | Receita ÷ número de vendas do período (`R$`; `null` sem vendas). `detalhe`: Vendas | `venda_fechada` |
+| `ven-04` Ciclo médio de venda | `numero` | Período | Média de dias (1 casa) entre `oportunidades.criado_em` e o evento `ganha`, nas oportunidades ganhas no período (`null` se nenhuma). `detalhe`: Ganhas | `etapa_oportunidade` |
+| `ven-05` Funil de vendas | `barras` (horizontal) | Período | Uma barra por etapa de `lead` a `ganha` (ordem de `funil_etapas`, sem `perdida`): oportunidades distintas com ao menos um evento daquela etapa no período. `extra` = conversão em relação à etapa anterior ("66,7%"; `null` na primeira ou se a anterior for 0). Unidade `oportunidades` | `etapa_oportunidade` |
+
 Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo):
 ```json
 {
@@ -771,6 +781,9 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - **Histórico com mais de um time:** em `escopo=time` sem `id`, a lista junta sprints de times diferentes com o mesmo número. Nesse caso o rótulo leva o nome do time (`Sprint 5 · Time Alfa`).
 - **Desvio do `proj-12` arredondado para inteiro** ("130%"), como no exemplo da especificação.
 - **`proj-15` com eixos "Dia" × "Tokens acumulados"** (não definidos na especificação).
+- **`origem_lead` em todos os cards de vendas:** a especificação cita o filtro explicitamente em `ven-02` e `ven-05`, e a seção 7.1 diz que ele vale no dashboard vendas. Por isso ele é aplicado em todos os cards, pela oportunidade do orçamento ou da venda.
+- **`detalhe` em `ven-02`, `ven-03` e `ven-04`:** a especificação não define. Foram usados ganhas e perdidas (02), quantidade de vendas (03) e quantidade de ganhas (04).
+- **Percentuais em texto no padrão brasileiro** (`FormatarPercentual`): 1 casa e vírgula ("66,7%"), como no exemplo do `ia-12`.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -791,3 +804,4 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - `PULAPI-012` — cards `proj-07`, `proj-08` e `proj-09` (horas estimadas × reais por etapa, um componente parametrizado pela etapa, com whitelist da coluna de estimativa) e testes.
 - `PULAPI-013` — cards `proj-10` e `proj-11` (tempo médio das atividades concluídas no período, por complexidade e por tipo) e testes.
 - `PULAPI-014` — cards `proj-12` (estouros), `proj-13` (histórico de sprints), `proj-14` (distribuição de horas) e `proj-15` (consumo de IA no tempo); dashboard de projetos completo.
+- `PULAPI-015` — base do dashboard vendas (CTEs `op`/`orc`/`vd`, `tipo_projeto` só nos cards de orçamento e venda) e cards `ven-01` (receita com variação), `ven-02` (conversão), `ven-03` (ticket médio), `ven-04` (ciclo de venda) e `ven-05` (funil).
