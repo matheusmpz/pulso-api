@@ -24,3 +24,36 @@ type ResumoConsumoIA struct {
 	Quota            int64   // soma de limite_tokens dos projetos de P
 	CustoPeriodo     float64 // custo (R$) de T entre de e ate
 }
+
+// DiaBurnUp é um dia do burn-up (proj-04): horas de H acumuladas até o
+// fim do dia e estimativa das atividades de A concluídas até o fim do dia.
+type DiaBurnUp struct {
+	Dia                 Data
+	HorasAcumuladas     float64
+	EstimativaConcluida float64
+}
+
+// BurnUp alimenta o proj-04.
+type BurnUp struct {
+	EstimativaTotal float64 // soma de estimativa_horas de A
+	Dias            []DiaBurnUp
+}
+
+// ContagemStatus alimenta o proj-05: atividades de A por status atual.
+type ContagemStatus struct {
+	Abertas, EmAndamento, Concluidas int
+}
+
+// DiaBurndown é um dia da sprint no burndown (proj-06): estimativa das
+// atividades da sprint ainda não concluídas ao fim do dia.
+type DiaBurndown struct {
+	Dia      Data
+	Restante float64
+}
+
+// Burndown alimenta o proj-06. Sprint nil = nenhuma sprint alvo.
+type Burndown struct {
+	Sprint *Sprint
+	Total  float64 // soma das estimativas das atividades da sprint em A
+	Dias   []DiaBurndown
+}
