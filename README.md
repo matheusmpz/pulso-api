@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Por enquanto existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`) os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`) e as opções de filtro (`GET /filtros/opcoes`), todas documentadas no [Swagger](#swagger). A validação dos filtros e os conjuntos do escopo já existem e serão usados pelos cálculos dos cards.
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados, mas os **cálculos ainda estão pendentes**: até cada grupo ser implementado, o card volta com `erro`.
 
 ## Stack
 
@@ -501,6 +501,119 @@ Ordem: origens e modelos em ordem alfabética, projetos e times por nome, sprint
 
 ---
 
+### Dados dos cards
+
+Os cards são calculados na API, a partir dos filtros (seção [Filtros, escopo e período](#filtros-escopo-e-período)). O front só desenha o que recebe.
+
+#### `GET /dashboards/:chave/dados`
+Calcula **todos** os cards que o perfil vê no dashboard, para os filtros da query string, e devolve os resultados na ordem dos códigos.
+- Os cards são calculados em paralelo, até **4 ao mesmo tempo**, com **10 s por card**.
+- **Se um card falhar** (erro, timeout ou cálculo pendente), o endpoint **não falha**: aquele card volta com `erro` no lugar de `dados`, e o motivo real vai só para o log.
+- `filtros_aplicados` mostra os filtros já normalizados: padrões aplicados, listas ordenadas e parâmetros que não valem para o dashboard como `null`.
+
+```
+GET /dashboards/vendas/dados?de=2026-10-01&ate=2026-10-31&origem_lead=site,indicacao
+```
+
+**Resposta de sucesso `200`** (resumida; valores ilustrativos)
+```json
+{
+  "sucesso": true,
+  "dados": {
+    "dashboard": { "id": 2, "chave": "vendas", "titulo": "Vendas" },
+    "filtros_aplicados": {
+      "id": null, "de": "2026-10-01", "ate": "2026-10-31",
+      "tipo_projeto": null, "status_projeto": null,
+      "origem_lead": ["indicacao", "site"], "modelo": null
+    },
+    "cards": [
+      {
+        "codigo": "ven-01", "titulo": "Receita fechada", "tipo": "numero",
+        "dados": { "valor": 125000.0, "unidade": "R$", "variacao": { "valor": 12.5, "unidade": "%" }, "detalhe": [ { "rotulo": "Vendas", "valor": 4, "unidade": "vendas" } ] },
+        "alerta": null,
+        "atualizado_em": "2026-11-14T12:00:00-03:00"
+      },
+      {
+        "codigo": "ven-02", "titulo": "Taxa de conversão", "tipo": "numero",
+        "alerta": null,
+        "erro": "Não foi possível calcular este card."
+      }
+    ]
+  }
+}
+```
+
+**Erros**
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `400` | Filtro inválido (ver [validação](#filtros-escopo-e-período)) | mensagem específica, ex.: `'de' (2026-11-10) não pode ser maior que 'ate' (2026-11-01).` |
+| `401` | Erros de token | — |
+| `403` | O perfil não vê nenhum card do dashboard | `Você não tem acesso a este recurso` |
+| `404` | Dashboard inexistente ou inativo | `Dashboard não encontrado.` |
+| `500` | Erro no banco ao buscar o dashboard, os cards ou a sprint | `Erro interno. Tente novamente mais tarde.` |
+
+---
+
+#### `GET /cards/:codigo/dados`
+Calcula **um** card. Os filtros valem conforme o dashboard do card: por exemplo, `escopo` é ignorado em `ven-01`. Assim como no endpoint do dashboard, uma falha de cálculo devolve **200** com o card trazendo `erro`.
+
+**Resposta de sucesso `200`**
+```json
+{
+  "sucesso": true,
+  "dados": {
+    "filtros_aplicados": { "escopo": "projeto", "id": 3, "de": "2026-10-16", "ate": "2026-11-14", "tipo_projeto": null, "status_projeto": null, "origem_lead": null, "modelo": null },
+    "card": {
+      "codigo": "proj-01", "titulo": "Progresso", "tipo": "numero",
+      "dados": { "valor": 72.5, "unidade": "%", "variacao": null, "detalhe": [ { "rotulo": "Concluídas", "valor": 12, "unidade": "atividades" } ] },
+      "alerta": null,
+      "atualizado_em": "2026-11-14T12:00:00-03:00"
+    }
+  }
+}
+```
+
+**Erros**
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `400` | Filtro inválido | mensagem específica |
+| `401` | Erros de token | — |
+| `403` | O card existe e está ativo, mas o perfil não pode vê-lo | `Você não tem acesso a este recurso` |
+| `404` | Card inexistente, inativo ou de dashboard inativo | `Card não encontrado.` |
+| `500` | Erro no banco | `Erro interno. Tente novamente mais tarde.` |
+
+---
+
+### Formato dos dados dos cards
+
+Envelope de cada card (`CardResultado`):
+
+| Campo | Descrição |
+|---|---|
+| `codigo`, `titulo`, `tipo` | Vêm da tabela `cards`. A `descricao` (texto do modal) vem em `GET /dashboards/:chave` |
+| `dados` | Formato conforme o `tipo` (abaixo). Ausente quando há `erro` |
+| `alerta` | Sempre `null` no MVP (limiares fora do escopo) |
+| `atualizado_em` | Quando o card foi calculado, com o offset do fuso. Ausente quando há `erro` |
+| `erro` | Só existe quando o card falhou: `Não foi possível calcular este card.` |
+
+Formatos de `dados` por tipo (as chaves seguem o formato de dados do Recharts, usado pelo shadcn/ui):
+
+| Tipo | Formato |
+|---|---|
+| `numero` | `{ "valor": 72.5, "unidade": "%", "variacao": { "valor": 3.2, "unidade": "%" } \| null, "detalhe": [ { "rotulo": "Entrada", "valor": 1200, "unidade": "tokens" } ] \| null }` |
+| `linhas`, `area` | `{ "series": [ { "chave": "ideal", "nome": "Ideal" } ], "pontos": [ { "x": "2026-11-01", "ideal": 0, "real": null } ], "eixo_x": "...", "eixo_y": "...", "unidade": "%", "referencia": { "nome": "...", "valor": 1000 } \| null, "extra": { } \| null }` |
+| `barras` | `{ "itens": [ { "rotulo": "...", "valor": 12.5, "extra": "38%" } ], "unidade": "h", "horizontal": true, "total": 12 \| null }` |
+| `barras_agrupadas` | `{ "series": [ { "chave": "real", "nome": "Real", "pilha": "custo" } ], "itens": [ { "rotulo": "Análise", "real": 12, "estimado": 10 } ], "unidade": "h" }`. Séries com o mesmo `pilha` empilham; `pilha` ausente = sem empilhamento |
+| `donut` | `{ "fatias": [ { "rotulo": "Abertas", "chave": "aberta", "valor": 4 } ], "total": 10 }` |
+| `radial` | `{ "valor": 65.0, "meta": 100, "unidade": "%", "detalhe": [ { "rotulo": "Consumido", "valor": 650000, "unidade": "tokens" } ] }` |
+| `lista` | `{ "colunas": ["Projeto", "Alerta", "Valor", "Quando"], "linhas": [ ["P1", "Quota", "85,3%", "2026-11-10"] ], "total": 3 }` |
+
+Convenções: uma razão com denominador 0 devolve `null` (o front mostra "—"). Percentuais saem com 1 casa, R$ e horas com 2, dias com 1. Valor ausente numa série é `null`. **Dado vazio nunca é erro:** a estrutura vem com zeros ou listas vazias. As chaves extras de cada card (ex.: `n` em `proj-10`, `tokens` em `ia-07`) são documentadas junto com o cálculo do card.
+
+---
+
 ## Decisões de implementação
 
 - **Module path:** `pulso-api` (nenhum foi informado). Para renomear: `go mod edit -module <novo>` e ajuste dos imports.
@@ -545,6 +658,13 @@ Ordem: origens e modelos em ordem alfabética, projetos e times por nome, sprint
 - **`escopo=time` sem `id`:** P são os projetos com ao menos uma atividade (de qualquer time), e T é o consumo de qualquer desenvolvedor nesses projetos.
 - **Datas como `models.Data`:** um dia do calendário (meia-noite no fuso do app) que vira `"AAAA-MM-DD"` no JSON. Colunas `DATE` lidas do banco são convertidas sem trocar de dia (`utils.DataDoBanco`).
 - **Teste de semântica com transação e rollback:** o cenário dos conjuntos do escopo é inserido numa transação desfeita no final. Mesmo assim, só roda com `PULSO_TESTE_FIXTURE=1`, porque as sequências avançam.
+- **Os 41 cards registrados desde já, com cálculo "pendente":** a API não sobe se algum card ativo ficar sem Calculador. Para os cards entrarem aos poucos sem quebrar essa regra, cada código tem um calculador pendente com os **gatilhos reais** (seção 12). Ele devolve "cálculo ainda não implementado", o que vira o `erro` padrão do card. Cada etapa de cards troca os pendentes do seu grupo pelo cálculo real (`Registro.Registrar`).
+- **Calculador sobrescrito pelo serviço:** `codigo`, `titulo`, `tipo`, `alerta` (sempre `null`) e `atualizado_em` são preenchidos pelo `Servico` a partir da tabela `cards`. O calculador só monta `dados`.
+- **Timeout garantido mesmo se o cálculo ignorar o contexto:** o cálculo roda numa goroutine e o serviço espera o resultado ou o prazo de 10 s, o que vier primeiro. Um pânico num calculador vira erro daquele card, sem derrubar a requisição.
+- **`GET /cards/:codigo/dados` com falha de cálculo devolve 200** e o card com `erro`, igual ao endpoint do dashboard, para o front tratar falha de card do mesmo jeito nos dois casos.
+- **Card de dashboard inativo dá 404**, mesmo se o card estiver ativo.
+- **`alerta: null` também nos cards com erro:** o envelope sempre traz `alerta`; `dados` e `atualizado_em` só aparecem no sucesso, e `erro` só na falha.
+- **`models.Data` lê e grava `"AAAA-MM-DD"` em JSON**, para os filtros aplicados poderem ser lidos de volta (ex.: no WebSocket).
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -558,3 +678,4 @@ Ordem: origens e modelos em ordem alfabética, projetos e times por nome, sprint
 - `PULAPI-005` — dashboards, cards e permissões: `GET /dashboards` (só dashboards com cards ativos e permitidos, com `total_cards`), `GET /dashboards/:chave` (cards visíveis, sem dados), regra de acesso 404/403 e testes.
 - `PULAPI-006` — Swagger: `docs/` gerado pelo swag com as rotas existentes, Swagger UI em `/swagger/index.html` (com redirecionamento de `/swagger`), autenticação Bearer no **Authorize**, `SWAGGER_ENABLED` e instruções para regenerar.
 - `PULAPI-007` — filtros e escopo: parse, validação e normalização dos filtros (padrões, enums, datas, limite de 5 anos, sprint), período anterior, conjuntos do escopo P/A/H/T/quota em SQL, `GET /filtros/opcoes`, testes de unidade e de integração.
+- `PULAPI-008` — base dos cálculos: interface `Calculador`, registro dos 41 cards (com gatilhos e cálculo pendente), validação do registro na inicialização, serviço de cálculo (4 em paralelo, 10 s por card, isolamento de falhas), formatos de `dados` por tipo, `GET /dashboards/:chave/dados`, `GET /cards/:codigo/dados` e testes.
