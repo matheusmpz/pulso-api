@@ -44,9 +44,12 @@ func NovoRegistro(db *sql.DB) Registro {
 	projetos := repositories.NewMetricasProjetosRepository(db)
 	ia := repositories.NewMetricasIARepository(db)
 
-	reg.Registrar(NovoProgresso(projetos)) // proj-01
-	reg.Registrar(NovoHoras(projetos))     // proj-02
-	reg.Registrar(NovoCustoIAProjeto(ia))  // proj-03
+	reg.Registrar(NovoProgresso(projetos))       // proj-01
+	reg.Registrar(NovoHoras(projetos))           // proj-02
+	reg.Registrar(NovoCustoIAProjeto(ia))        // proj-03
+	reg.Registrar(NovoBurnUp(projetos))          // proj-04
+	reg.Registrar(NovoIssuesPorStatus(projetos)) // proj-05
+	reg.Registrar(NovoBurndown(projetos))        // proj-06
 	return reg
 }
 

@@ -13,6 +13,9 @@ import (
 type repoProjetosFalso struct {
 	progresso models.ResumoProgresso
 	horas     models.ResumoHoras
+	burnUp    models.BurnUp
+	status    models.ContagemStatus
+	burndown  models.Burndown
 	err       error
 }
 
