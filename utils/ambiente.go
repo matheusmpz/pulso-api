@@ -30,6 +30,22 @@ func ValidarAmbiente() error {
 	return nil
 }
 
+// ParseBool converte um texto de variável de ambiente em booleano.
+// Aceita true/false, 1/0, sim/nao (sem diferenciar maiúsculas). Vazio
+// usa o padrão.
+func ParseBool(valor string, padrao bool) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(valor)) {
+	case "":
+		return padrao, nil
+	case "true", "1", "sim":
+		return true, nil
+	case "false", "0", "nao", "não":
+		return false, nil
+	default:
+		return false, fmt.Errorf("valor booleano inválido (%q): use true ou false", valor)
+	}
+}
+
 // EnvOuPadrao devolve o valor da variável ou o padrão, se ela estiver vazia.
 func EnvOuPadrao(nome, padrao string) string {
 	if v := strings.TrimSpace(os.Getenv(nome)); v != "" {
