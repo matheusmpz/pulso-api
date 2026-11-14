@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"pulso-api/models"
+	"pulso-api/repositories"
 )
 
 // Calculador calcula um card. Codigo deve bater exatamente com
@@ -39,9 +40,13 @@ func NovoRegistro(db *sql.DB) Registro {
 	for codigo, gatilhos := range gatilhosPorCard {
 		reg[codigo] = pendente{codigo: codigo, gatilhos: gatilhos}
 	}
-	// Cálculos reais entram aqui, sobrescrevendo os pendentes. Ex.:
-	// reg.Registrar(NovoProgresso(repositories.NewMetricasProjetosRepository(db)))
-	_ = db
+	// Cálculos reais, sobrescrevendo os pendentes
+	projetos := repositories.NewMetricasProjetosRepository(db)
+	ia := repositories.NewMetricasIARepository(db)
+
+	reg.Registrar(NovoProgresso(projetos)) // proj-01
+	reg.Registrar(NovoHoras(projetos))     // proj-02
+	reg.Registrar(NovoCustoIAProjeto(ia))  // proj-03
 	return reg
 }
 
