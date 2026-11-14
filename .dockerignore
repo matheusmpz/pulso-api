@@ -1,0 +1,52 @@
+# =====================================================================
+# .dockerignore — o que NÃO vai para dentro do build da imagem
+#
+# No "docker build", a pasta inteira é enviada ao Docker (o "contexto").
+# Tudo listado aqui fica de fora: o build fica mais rápido e nenhum
+# segredo ou arquivo interno acaba dentro da imagem.
+# =====================================================================
+
+# Histórico do Git (grande e desnecessário para compilar)
+.git
+.gitignore
+.gitattributes
+
+# Variáveis de ambiente e segredos (o .env.example pode ir, não tem segredo)
+.env
+.env.*
+!.env.example
+
+# Documentos internos do projeto
+CLAUDE.md
+Estrutura.md
+
+# Configuração de editor
+.vscode
+.idea
+
+# Binários e artefatos de build/teste
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+pulso-api
+api
+__debug_bin*
+
+# Logs e temporários
+*.log
+tmp/
+temp/
+
+# Arquivos do próprio Docker (não são necessários dentro da imagem)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Observação: a pasta docs/ (Swagger gerado) NÃO está aqui de propósito:
+# quando o Swagger entrar, o main.go vai importar esse pacote e ele
+# precisa estar no build.
