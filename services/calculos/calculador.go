@@ -129,3 +129,13 @@ func (p pendente) Gatilhos() []string { return p.gatilhos }
 func (p pendente) Calcular(context.Context, models.Filtros) (models.CardResultado, error) {
 	return models.CardResultado{}, ErrNaoImplementado
 }
+
+// Gatilhos devolve, para cada card, os eventos que podem mudar o resultado
+// (usado pelo hub do tempo real).
+func (r Registro) Gatilhos() map[string][]string {
+	g := make(map[string][]string, len(r))
+	for codigo, c := range r {
+		g[codigo] = c.Gatilhos()
+	}
+	return g
+}
