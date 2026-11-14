@@ -1,18 +1,22 @@
 // Pulso API — ponto de entrada.
 //
 // Carrega o .env, valida as variáveis obrigatórias, abre o pool do banco,
-// sobe o Gin com CORS e as rotas e encerra de forma graciosa.
-// Autenticação, cálculos dos cards e tempo real entram nas próximas etapas.
+// sobe o Gin com CORS, as rotas e o Swagger e encerra de forma graciosa.
+// Cálculos dos cards e tempo real entram nas próximas etapas.
+//
+// As anotações abaixo são lidas pelo swag para gerar a pasta docs/
+// (swag init -g cmd/api/main.go -o docs).
 //
 // @title          Pulso API
 // @version        1.0
-// @description    API do Pulso, o dashboard de BI da Fábrica de Software.
+// @description    API do Pulso, o dashboard de BI da Fábrica de Software. Toda a regra de cálculo dos cards fica aqui; o front só desenha o que a API devolve.
+// @description    Para usar as rotas protegidas: faça POST /auth/login, copie o "token" da resposta, clique em "Authorize" e informe "Bearer <token>".
 // @BasePath       /
 //
 // @securityDefinitions.apikey BearerAuth
 // @in             header
 // @name           Authorization
-// @description    Informe o valor no formato "Bearer <token>".
+// @description    Informe o valor no formato "Bearer <token>" (com a palavra Bearer e um espaço antes do token).
 package main
 
 import (
@@ -32,6 +36,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"pulso-api/db"
+	_ "pulso-api/docs" // documentação do Swagger gerada pelo swag
 	"pulso-api/routes"
 	"pulso-api/utils"
 )
@@ -67,6 +72,12 @@ func main() {
 		log.Fatal("Configuração inválida: ", err)
 	}
 
+	// Swagger UI ligado ou não (padrão: ligado)
+	swaggerHabilitado, err := utils.ParseBool(os.Getenv("SWAGGER_ENABLED"), true)
+	if err != nil {
+		log.Fatal("Configuração inválida: SWAGGER_ENABLED: ", err)
+	}
+
 	// Inicializa o banco e o pool antes de receber qualquer requisição
 	database := db.GetDB()
 
@@ -91,6 +102,10 @@ func main() {
 
 	// Registra todas as rotas passando o banco e a configuração do JWT
 	routes.Register(r, database, jwtCfg)
+	if swaggerHabilitado {
+		routes.RegisterSwagger(r)
+		log.Println("Swagger UI em /swagger/index.html")
+	}
 
 	// Porta via variável de ambiente ou padrão 8080
 	port := os.Getenv("PORT")

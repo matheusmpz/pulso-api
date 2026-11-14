@@ -1,0 +1,343 @@
+basePath: /
+definitions:
+  controllers.DashboardDetalheDoc:
+    properties:
+      dados:
+        $ref: '#/definitions/models.DashboardDetalhe'
+      sucesso:
+        example: true
+        type: boolean
+    type: object
+  controllers.ErroDoc:
+    properties:
+      erro:
+        example: mensagem de erro
+        type: string
+      sucesso:
+        example: false
+        type: boolean
+    type: object
+  controllers.HealthResposta:
+    properties:
+      banco:
+        example: ok
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
+  controllers.ListaDashboardsDoc:
+    properties:
+      dados:
+        $ref: '#/definitions/models.ListaDashboards'
+      sucesso:
+        example: true
+        type: boolean
+    type: object
+  controllers.LoginRespostaDoc:
+    properties:
+      dados:
+        $ref: '#/definitions/models.LoginResposta'
+      sucesso:
+        example: true
+        type: boolean
+    type: object
+  controllers.MeRespostaDoc:
+    properties:
+      dados:
+        $ref: '#/definitions/models.MeResposta'
+      sucesso:
+        example: true
+        type: boolean
+    type: object
+  models.CardMeta:
+    properties:
+      codigo:
+        example: proj-01
+        type: string
+      descricao:
+        example: Mostra quanto do trabalho planejado já foi concluído.
+        type: string
+      tipo:
+        example: numero
+        type: string
+      titulo:
+        example: Progresso
+        type: string
+    type: object
+  models.DashboardDetalhe:
+    properties:
+      cards:
+        items:
+          $ref: '#/definitions/models.CardMeta'
+        type: array
+      chave:
+        example: projetos
+        type: string
+      descricao:
+        example: Andamento dos projetos em desenvolvimento.
+        type: string
+      id:
+        example: 1
+        type: integer
+      titulo:
+        example: Projetos
+        type: string
+    type: object
+  models.DashboardResumo:
+    properties:
+      chave:
+        example: projetos
+        type: string
+      descricao:
+        example: Andamento dos projetos em desenvolvimento.
+        type: string
+      id:
+        example: 1
+        type: integer
+      titulo:
+        example: Projetos
+        type: string
+      total_cards:
+        example: 15
+        type: integer
+    type: object
+  models.ListaDashboards:
+    properties:
+      dashboards:
+        items:
+          $ref: '#/definitions/models.DashboardResumo'
+        type: array
+    type: object
+  models.LoginInput:
+    properties:
+      email:
+        example: diretoria@pulso.local
+        type: string
+      senha:
+        example: sua_senha
+        type: string
+    required:
+    - email
+    - senha
+    type: object
+  models.LoginResposta:
+    properties:
+      expira_em:
+        example: "2026-11-15T12:00:00-03:00"
+        type: string
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      usuario:
+        $ref: '#/definitions/models.UsuarioResumo'
+    type: object
+  models.MeResposta:
+    properties:
+      email:
+        example: diretoria@pulso.local
+        type: string
+      id:
+        example: 5b1f8a2e-3c4d-4e5f-8a9b-0c1d2e3f4a5b
+        type: string
+      nome:
+        example: Diretoria (dev)
+        type: string
+      perfil:
+        $ref: '#/definitions/models.PerfilResumo'
+    type: object
+  models.PerfilResumo:
+    properties:
+      descricao:
+        example: Acesso a todos os dashboards e cards, incluindo vendas.
+        type: string
+      id:
+        example: 1
+        type: integer
+      nome:
+        example: diretoria
+        type: string
+    type: object
+  models.UsuarioResumo:
+    properties:
+      email:
+        example: diretoria@pulso.local
+        type: string
+      id:
+        example: 5b1f8a2e-3c4d-4e5f-8a9b-0c1d2e3f4a5b
+        type: string
+      nome:
+        example: Diretoria (dev)
+        type: string
+      perfil:
+        example: diretoria
+        type: string
+    type: object
+info:
+  contact: {}
+  description: |-
+    API do Pulso, o dashboard de BI da Fábrica de Software. Toda a regra de cálculo dos cards fica aqui; o front só desenha o que a API devolve.
+    Para usar as rotas protegidas: faça POST /auth/login, copie o "token" da resposta, clique em "Authorize" e informe "Bearer <token>".
+  title: Pulso API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Autentica com e-mail e senha de um usuário ativo e devolve um JWT
+        (HS256). Qualquer falha de credencial devolve 401 com a mesma mensagem genérica.
+      parameters:
+      - description: Credenciais
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.LoginRespostaDoc'
+        "400":
+          description: Corpo inválido ou campos vazios
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "401":
+          description: E-mail ou senha inválidos
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+      summary: Login
+      tags:
+      - auth
+  /auth/me:
+    get:
+      consumes:
+      - application/json
+      description: Devolve os dados do usuário dono do token e do perfil dele.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.MeRespostaDoc'
+        "401":
+          description: Sem token, token inválido ou usuário inativo
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+      security:
+      - BearerAuth: []
+      summary: Usuário logado
+      tags:
+      - auth
+  /dashboards:
+    get:
+      consumes:
+      - application/json
+      description: Devolve os dashboards ativos que têm ao menos um card ativo permitido
+        ao perfil do usuário, com a quantidade desses cards (total_cards). Lista vazia
+        se o perfil não vê nenhum.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ListaDashboardsDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+      security:
+      - BearerAuth: []
+      summary: Lista os dashboards visíveis
+      tags:
+      - dashboards
+  /dashboards/{chave}:
+    get:
+      consumes:
+      - application/json
+      description: Devolve o dashboard e os cards ativos que o perfil pode ver (codigo,
+        titulo, descricao e tipo), ordenados por código e sem os dados calculados.
+        A descricao é o texto do modal de informação.
+      parameters:
+      - description: Chave do dashboard
+        enum:
+        - projetos
+        - vendas
+        - ia
+        in: path
+        name: chave
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.DashboardDetalheDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "403":
+          description: Você não tem acesso a este recurso
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "404":
+          description: Dashboard inexistente ou inativo
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+      security:
+      - BearerAuth: []
+      summary: Detalhe de um dashboard
+      tags:
+      - dashboards
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Devolve o status da API e do banco. Responde 503 se o banco não
+        responder ao ping.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.HealthResposta'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/controllers.HealthResposta'
+      summary: Verifica a saúde da API
+      tags:
+      - health
+securityDefinitions:
+  BearerAuth:
+    description: Informe o valor no formato "Bearer <token>" (com a palavra Bearer
+      e um espaço antes do token).
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

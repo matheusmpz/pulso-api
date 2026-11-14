@@ -44,6 +44,38 @@ func TestVariaveisFaltando(t *testing.T) {
 	}
 }
 
+func TestParseBool(t *testing.T) {
+	casos := []struct {
+		valor    string
+		padrao   bool
+		esperado bool
+		erro     bool
+	}{
+		{"", true, true, false},
+		{"", false, false, false},
+		{"true", false, true, false},
+		{" TRUE ", false, true, false},
+		{"1", false, true, false},
+		{"sim", false, true, false},
+		{"false", true, false, false},
+		{"0", true, false, false},
+		{"não", true, false, false},
+		{"talvez", true, false, true},
+	}
+
+	for _, c := range casos {
+		t.Run(c.valor, func(t *testing.T) {
+			obtido, err := ParseBool(c.valor, c.padrao)
+			if (err != nil) != c.erro {
+				t.Fatalf("erro esperado=%v, obtido %v", c.erro, err)
+			}
+			if obtido != c.esperado {
+				t.Errorf("esperado %v, obtido %v", c.esperado, obtido)
+			}
+		})
+	}
+}
+
 func TestEnvOuPadrao(t *testing.T) {
 	t.Setenv("PULSO_TESTE_DEFINIDA", "valor")
 	t.Setenv("PULSO_TESTE_VAZIA", "")
