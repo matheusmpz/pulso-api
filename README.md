@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Por enquanto existem a conexão com o banco e o `GET /health`.
+> **Status:** em construção. Por enquanto existem o `GET /health` e a autenticação (`POST /auth/login` e `GET /auth/me`).
 
 ## Stack
 
@@ -150,14 +150,14 @@ Get-Content db/dev_dados_exemplo.sql | docker compose exec -T db psql -U <DB_USE
 | `DB_NAME` | sim | `pulso_db` | Nome do banco |
 | `DB_SSLMODE` | não | `disable` | `sslmode` do `lib/pq` |
 | `DB_PORTA_DOCKER` | não | `5433` | Porta do Postgres do docker compose na sua máquina (só no compose) |
-| `JWT_SECRET` | sim | — | Chave de assinatura do JWT |
-| `JWT_EXPIRA_HORAS` | não | `24` | Validade do token |
+| `JWT_SECRET` | sim | — | Chave de assinatura do JWT. Gere uma aleatória: `openssl rand -hex 32` |
+| `JWT_EXPIRA_HORAS` | não | `24` | Validade do token, em horas inteiras maiores que zero |
 | `CORS_ORIGINS` | não | `http://localhost:3000` | Origens permitidas (separadas por vírgula), também usadas no WebSocket |
 | `POLL_INTERVAL_MS` | não | `2000` | Intervalo do polling de eventos |
-| `APP_TIMEZONE` | não | `America/Sao_Paulo` | Fuso dos limites de dia |
+| `APP_TIMEZONE` | não | `America/Sao_Paulo` | Fuso dos limites de dia e dos timestamps das respostas (ex.: `expira_em`) |
 | `SWAGGER_ENABLED` | não | `true` | Serve o Swagger UI em `/swagger/index.html` |
 
-Se faltar alguma variável obrigatória, a API não sobe e informa quais faltam:
+Se faltar alguma variável obrigatória, ou se `JWT_EXPIRA_HORAS` ou `APP_TIMEZONE` forem inválidos, a API não sobe e informa o motivo:
 
 ```
 Configuração inválida: variáveis de ambiente obrigatórias não definidas: DB_HOST, JWT_SECRET
@@ -218,6 +218,86 @@ Verifica se a API está no ar e se o banco responde (ping com prazo de 2 s). Nã
 
 ---
 
+#### `POST /auth/login`
+Autentica um usuário **ativo** com e-mail e senha e devolve um JWT (HS256). O e-mail não diferencia maiúsculas. Os usuários vêm do seed; não há cadastro pela API.
+
+**Body**
+```json
+{ "email": "diretoria@pulso.local", "senha": "sua_senha" }
+```
+
+**Resposta de sucesso `200`**
+```json
+{
+  "sucesso": true,
+  "dados": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expira_em": "2026-11-15T12:00:00-03:00",
+    "usuario": {
+      "id": "5b1f8a2e-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "nome": "Diretoria (dev)",
+      "email": "diretoria@pulso.local",
+      "perfil": "diretoria"
+    }
+  }
+}
+```
+
+**Erros**
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `400` | JSON inválido, ou `email`/`senha` ausentes ou vazios | `Informe e-mail e senha.` |
+| `401` | E-mail inexistente, senha errada ou usuário inativo (sempre a mesma mensagem) | `E-mail ou senha inválidos` |
+| `500` | Erro no banco ou ao gerar o token | `Erro interno. Tente novamente mais tarde.` |
+
+### Rotas protegidas
+
+Enviam o token no cabeçalho:
+
+```
+Authorization: Bearer <token>
+```
+
+Erros comuns a todas as rotas protegidas:
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `401` | Cabeçalho ausente ou fora do formato `Bearer <token>` | `Token não informado.` |
+| `401` | Token com assinatura errada, adulterado, de outro emissor ou expirado | `Token inválido ou expirado.` |
+
+---
+
+#### `GET /auth/me`
+Dados do usuário dono do token e do perfil dele.
+
+**Resposta de sucesso `200`**
+```json
+{
+  "sucesso": true,
+  "dados": {
+    "id": "5b1f8a2e-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    "nome": "Diretoria (dev)",
+    "email": "diretoria@pulso.local",
+    "perfil": {
+      "id": 1,
+      "nome": "diretoria",
+      "descricao": "Acesso a todos os dashboards e cards, incluindo vendas."
+    }
+  }
+}
+```
+
+**Erros**
+
+| Status | Quando | Mensagem |
+|---|---|---|
+| `401` | Erros de token (tabela acima) | — |
+| `401` | O token é válido, mas o usuário foi desativado | `Sessão inválida. Faça login novamente.` |
+| `500` | Erro no banco | `Erro interno. Tente novamente mais tarde.` |
+
+---
+
 ## Decisões de implementação
 
 - **Module path:** `pulso-api` (nenhum foi informado). Para renomear: `go mod edit -module <novo>` e ajuste dos imports.
@@ -237,6 +317,13 @@ Verifica se a API está no ar e se o banco responde (ping com prazo de 2 s). Nã
 - **`DB_PORT=5432` forçado no compose, junto com `DB_HOST=db`:** o `.env` local costuma ter a porta do Postgres da máquina, e dentro da rede do Docker a porta é sempre a interna.
 - **Credenciais do Postgres do container:** `POSTGRES_USER`, `POSTGRES_PASSWORD` e `POSTGRES_DB` são preenchidas com as mesmas `DB_USER`, `DB_PASSWORD` e `DB_NAME` do `.env`, para a API e o banco nunca divergirem. O compose para com mensagem clara se alguma faltar.
 - **Imagem final `alpine:3.21`:** versão fixa, para o build ser reproduzível. O healthcheck usa o `wget` que já vem no alpine.
+- **Configuração do JWT injetada:** `ConfigJWT` (segredo e validade) é lida uma vez no `main.go` e passada para `routes.Register`, o controller e o `AuthMiddleware(cfg)`. Isso permite testar sem variável de ambiente. `JWT_EXPIRA_HORAS` inválido impede a API de subir.
+- **Validação do token:** aceita só HS256, exige expiração e confere o emissor (`iss = pulso-api`). Além dos claims pedidos (`usuario_id`, `perfil_id`, `perfil`, `email`), o token leva `sub` (id do usuário) e `iat`.
+- **Login sem revelar quais e-mails existem:** além da mensagem única, quando o e-mail não existe a API compara a senha com um hash fictício. Assim o tempo de resposta fica igual ao de uma senha errada (medido: ~52 ms nos dois casos).
+- **400 no login:** JSON inválido ou campos vazios devolvem 400 (`Informe e-mail e senha.`), porque é erro de formato, não de credencial. O formato do e-mail não é validado: um e-mail malformado simplesmente não existe e cai no 401.
+- **`/auth/me` consulta o banco:** além de validar o token, busca o usuário ativo. Um usuário desativado depois do login recebe 401 (`Sessão inválida`), mesmo com o token ainda válido. As outras rotas protegidas confiam só no token até expirar.
+- **Fuso da aplicação:** `APP_TIMEZONE` é carregado na inicialização (`utils.ConfigurarFuso`) e os timestamps das respostas saem com o offset do fuso (ex.: `-03:00`). A base de fusos vai embutida no binário (`time/tzdata`), então não depende do sistema operacional nem do container.
+- **`expira_em` em segundos:** truncado para segundos, para bater com o `exp` gravado no JWT.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -246,3 +333,4 @@ Verifica se a API está no ar e se o banco responde (ping com prazo de 2 s). Nã
 - `PULAPI-001` — estrutura do projeto: módulo Go, pastas, `.gitignore`, `.env.example`, debugger do VS Code, `main.go` mínimo com shutdown gracioso e README inicial.
 - `PULAPI-002` — conexão com o banco (pool singleton com `Ping`), validação das variáveis obrigatórias, padrão de resposta, `GET /health` (503 se o banco cair), `.gitattributes` com LF e testes de unidade.
 - `PULAPI-003` — Docker: `Dockerfile` multi-stage (usuário sem privilégio, `HEALTHCHECK`), `.dockerignore`, `docker-compose.yml` com Postgres 16 (schema e seed na primeira subida, porta 5433) e API, `.env.example` atualizado e seção "Rodando com Docker".
+- `PULAPI-004` — autenticação: `POST /auth/login` (bcrypt, mensagem genérica, tempo constante), `GET /auth/me`, geração e validação de JWT HS256, `AuthMiddleware` (injeta `usuario_id`, `perfil_id` e `perfil`), fuso da aplicação (`APP_TIMEZONE`) e testes.
