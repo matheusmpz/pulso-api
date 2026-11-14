@@ -47,6 +47,10 @@ type repoIAFalso struct {
 	porModelo  []models.GrupoCusto
 	porEtapa   []models.GrupoCusto
 	tipoCx     []models.CustoTipoComplexidade
+	faixas     []models.FaixaIntensidade
+	peso       []models.PesoIAProjeto
+	quotas     []models.AlertaQuota
+	picos      []models.AlertaPico
 	err        error
 }
 

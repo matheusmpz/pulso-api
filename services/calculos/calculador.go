@@ -85,6 +85,9 @@ func NovoRegistro(db *sql.DB) Registro {
 	reg.Registrar(NovoCustoPorModelo(ia))        // ia-07
 	reg.Registrar(NovoCustoPorEtapa(ia))         // ia-08
 	reg.Registrar(NovoCustoTipoComplexidade(ia)) // ia-09
+	reg.Registrar(NovoIntensidadeDesempenho(ia)) // ia-10
+	reg.Registrar(NovoPesoIA(ia))                // ia-11
+	reg.Registrar(NovoAlertasConsumo(ia))        // ia-12
 	return reg
 }
 
