@@ -21,7 +21,11 @@ type repoProjetosFalso struct {
 	etapaPedida *string
 	// proj-10 e 11 (agrupamento → grupos)
 	tempoMedio map[string][]models.GrupoTempoMedio
-	err        error
+	// proj-12 a 14
+	estouros     models.Estouros
+	historico    []models.SprintHistorico
+	distribuicao []models.GrupoHoras
+	err          error
 }
 
 func (r repoProjetosFalso) Progresso(context.Context, models.Filtros) (models.ResumoProgresso, error) {
@@ -34,6 +38,7 @@ func (r repoProjetosFalso) Horas(context.Context, models.Filtros) (models.Resumo
 
 type repoIAFalso struct {
 	consumo models.ResumoConsumoIA
+	noTempo models.ConsumoNoTempo
 	err     error
 }
 
