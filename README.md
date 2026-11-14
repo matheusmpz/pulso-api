@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados, mas os **cálculos ainda estão pendentes**: até cada grupo ser implementado, o card volta com `erro`.
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: `proj-01` a `proj-03`.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
 
 ## Stack
 
@@ -663,6 +663,34 @@ Convenções: uma razão com denominador 0 devolve `null` (o front mostra "—")
 
 ---
 
+### Cards implementados
+
+Conjuntos **P** (projetos), **A** (atividades), **H** (horas), **T** (tokens) e **quota**: veja [Filtros, escopo e período](#filtros-escopo-e-período). "Acumulado" considera tudo até o fim do dia `ate` e ignora `de`. "Período" considera de `de` a `ate`. O status de uma atividade numa data é o do último evento até o fim daquele dia; sem evento, `aberta`.
+
+| Card | Tipo | Período | Cálculo | Gatilhos |
+|---|---|---|---|---|
+| `proj-01` Progresso | `numero` | Acumulado | `valor` = soma de `estimativa_horas` das atividades de A concluídas ÷ soma de `estimativa_horas` de A × 100 (ponderado pela estimativa; `null` sem atividades). `detalhe`: Concluídas e Total (`atividades`) | `atividade_criada`, `status_atividade` |
+| `proj-02` Horas | `numero` | Acumulado | `valor` = horas de H com `trabalhado_em` ≤ `ate` ÷ soma de `estimativa_horas` de A × 100 (passa de 100% em estouro; `null` sem estimativa). `detalhe`: Horas reais e Horas estimadas (`h`) | `horas_lancadas`, `atividade_criada` |
+| `proj-03` Custo de IA | `numero` | Acumulado (`valor`) e Período (custo) | `valor` = tokens (entrada + saída) de T até `ate` ÷ quota × 100 (`null` se a quota for 0). `detalhe`: Custo no período (`R$`, de `de` a `ate`) e Tokens consumidos (`tokens`, acumulado até `ate`) | `consumo_tokens` |
+
+Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo):
+```json
+{
+  "codigo": "proj-03", "titulo": "Custo de IA", "tipo": "numero",
+  "dados": {
+    "valor": 65.4, "unidade": "%", "variacao": null,
+    "detalhe": [
+      { "rotulo": "Custo no período", "valor": 11.42, "unidade": "R$" },
+      { "rotulo": "Tokens consumidos", "valor": 2484983, "unidade": "tokens" }
+    ]
+  },
+  "alerta": null,
+  "atualizado_em": "2026-11-14T14:52:52-03:00"
+}
+```
+
+---
+
 ## Decisões de implementação
 
 - **Module path:** `pulso-api` (nenhum foi informado). Para renomear: `go mod edit -module <novo>` e ajuste dos imports.
@@ -719,6 +747,11 @@ Convenções: uma razão com denominador 0 devolve `null` (o front mostra "—")
 - **Dados de exemplo determinísticos:** valores fixos e variação calculada a partir dos ids, sem `random()`. Assim, duas cargas no mesmo dia produzem os mesmos números, o que facilita comparar os cards.
 - **Script de exemplo com trava e transação única:** recusa rodar se já houver clientes, times, oportunidades ou projetos. Usa tabelas temporárias de apoio (`_opp`, `_atv`...), que somem no `COMMIT`; nas tabelas reais, só `INSERT`.
 - **Preço dos modelos fictício** (R$ por milhão de tokens), só para os custos terem ordens de grandeza diferentes entre os modelos.
+- **"Tokens consumidos" do `proj-03` é acumulado até `ate`** (o mesmo numerador do percentual de quota). Só o custo em R$ do detalhe é do período, como pede a especificação.
+- **Sem `variacao` nos cards `proj-01` a `proj-03`:** a especificação não pede, então vem `null`.
+- **Fórmulas puras em `services/calculos/formulas.go`:** `Percentual` (razão × 100 com 1 casa, `null` se o denominador for 0), `Variacao` e `Arredondar`, testadas sem banco e reaproveitadas por todos os cards.
+- **Status atual em SQL (`repositories.StatusAtividadeAte`):** subconsulta pelo último evento antes do fim do dia `ate` (maior `ocorrido_em`; empate, maior `id`), com `aberta` quando não há evento. É reaproveitado por todos os cards que dependem do status.
+- **Conferência dos cards contra SQL independente:** cada card foi comparado com uma consulta escrita de outro jeito (status via `DISTINCT ON`, filtros à mão) sobre os dados de exemplo, em 7 combinações de filtro (padrão, projeto, time, sprint, `ate` no passado, tipo e status, escopo vazio).
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -734,3 +767,4 @@ Convenções: uma razão com denominador 0 devolve `null` (o front mostra "—")
 - `PULAPI-007` — filtros e escopo: parse, validação e normalização dos filtros (padrões, enums, datas, limite de 5 anos, sprint), período anterior, conjuntos do escopo P/A/H/T/quota em SQL, `GET /filtros/opcoes`, testes de unidade e de integração.
 - `PULAPI-008` — base dos cálculos: interface `Calculador`, registro dos 41 cards (com gatilhos e cálculo pendente), validação do registro na inicialização, serviço de cálculo (4 em paralelo, 10 s por card, isolamento de falhas), formatos de `dados` por tipo, `GET /dashboards/:chave/dados`, `GET /cards/:codigo/dados` e testes.
 - `PULAPI-009` — dados de exemplo: `db/dev_dados_exemplo.sql` (~90 dias de funil, orçamentos, vendas, projetos, sprints, atividades, horas, tokens e metas, com trava e transação única) e guia do gerador Python no README.
+- `PULAPI-010` — cards `proj-01` (Progresso), `proj-02` (Horas) e `proj-03` (Custo de IA): repositories de métricas de projetos e de IA, fórmulas puras (percentual, variação, arredondamento), status atual da atividade em SQL e testes.
