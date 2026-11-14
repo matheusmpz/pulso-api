@@ -1,0 +1,7 @@
+# Força LF no working copy (o gofmt exige LF, mesmo no Windows com core.autocrlf)
+* text=auto eol=lf
+
+# Binários
+*.exe binary
+*.png binary
+*.jpg binary
