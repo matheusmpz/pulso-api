@@ -1,0 +1,54 @@
+# Documentos internos do projeto (nunca versionar)
+CLAUDE.md
+Estrutura.md
+
+# Variáveis de ambiente e credenciais
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials*
+secrets*
+
+# Binários
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/pulso-api
+/api
+__debug_bin*
+
+# Testes
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Logs
+*.log
+
+# Dependências
+vendor/
+
+# IDEs (o launch.json do debugger é versionado)
+.vscode/*
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Temporários
+tmp/
+temp/
