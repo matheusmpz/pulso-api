@@ -40,6 +40,7 @@ import (
 	"pulso-api/repositories"
 	"pulso-api/routes"
 	"pulso-api/services/calculos"
+	"pulso-api/services/tempo_real"
 	"pulso-api/utils"
 )
 
@@ -89,6 +90,28 @@ func main() {
 	validarRegistro(registro, repositories.NewCardRepository(database))
 	servicoCalculos := calculos.NovoServico(registro)
 
+	// Tempo real: hub de WebSocket e poller de eventos
+	intervaloPoll, err := utils.ParseIntervaloMs(os.Getenv("POLL_INTERVAL_MS"), 2000)
+	if err != nil {
+		log.Fatal("Configuração inválida: POLL_INTERVAL_MS: ", err)
+	}
+	hub := tempo_real.NovoHub(servicoCalculos, tempo_real.AcessoBanco{
+		Dashboards: repositories.NewDashboardRepository(database),
+		Cards:      repositories.NewCardRepository(database),
+		Filtros:    repositories.NewFiltroRepository(database),
+	}, registro.Gatilhos())
+	poller := &tempo_real.Poller{
+		Fonte:     repositories.NewEventoRepository(database),
+		Intervalo: intervaloPoll,
+		Notificar: hub.Notificar,
+	}
+	if err := poller.Iniciar(context.Background()); err != nil {
+		log.Fatal("Erro ao iniciar o poller de eventos: ", err)
+	}
+	ctxPoller, pararPoller := context.WithCancel(context.Background())
+	go poller.Rodar(ctxPoller)
+	log.Printf("Tempo real: poller a cada %s", intervaloPoll)
+
 	// Modo do Gin via variável de ambiente ou padrão release
 	modo := os.Getenv("GIN_MODE")
 	if modo == "" {
@@ -100,8 +123,9 @@ func main() {
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 
+	origens := lerOrigens(os.Getenv("CORS_ORIGINS"))
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     lerOrigens(os.Getenv("CORS_ORIGINS")),
+		AllowOrigins:     origens,
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -110,6 +134,7 @@ func main() {
 
 	// Registra todas as rotas passando o banco e a configuração do JWT
 	routes.Register(r, database, jwtCfg, servicoCalculos)
+	routes.RegisterWS(r, hub, jwtCfg, origens)
 	if swaggerHabilitado {
 		routes.RegisterSwagger(r)
 		log.Println("Swagger UI em /swagger/index.html")
@@ -143,6 +168,11 @@ func main() {
 	log.Println("Encerrando o servidor...")
 	ctxEncerrar, cancelar := context.WithTimeout(context.Background(), tempoEncerramento)
 	defer cancelar()
+
+	// Para o poller e fecha as conexões WebSocket antes do Shutdown (o
+	// Shutdown não fecha conexões que já viraram WebSocket)
+	pararPoller()
+	hub.Fechar()
 
 	if err := srv.Shutdown(ctxEncerrar); err != nil {
 		log.Println("Erro ao encerrar o servidor: ", err)
