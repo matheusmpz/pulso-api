@@ -64,3 +64,12 @@ type HorasEtapa struct {
 	Estimado float64
 	Real     float64
 }
+
+// GrupoTempoMedio alimenta o proj-10 (por complexidade) e o proj-11 (por
+// tipo de atividade): atividades de A concluídas no período.
+type GrupoTempoMedio struct {
+	Grupo         string  // valor do enum (ex.: "media", "correcao")
+	N             int     // quantidade de atividades
+	MediaReal     float64 // média das horas lançadas totais da atividade
+	MediaEstimada float64 // média de estimativa_horas
+}

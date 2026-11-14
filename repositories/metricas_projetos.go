@@ -31,6 +31,10 @@ type MetricasProjetosRepository interface {
 	// HorasEtapa: estimativa da etapa em A e horas de H na etapa até ate
 	// (proj-07 análise, proj-08 desenvolvimento, proj-09 testes).
 	HorasEtapa(ctx context.Context, f models.Filtros, etapa string) (models.HorasEtapa, error)
+	// TempoMedio: atividades de A concluídas no período (status atual
+	// concluida e último evento concluida entre de e ate), agrupadas por
+	// "complexidade" (proj-10) ou "tipo" (proj-11).
+	TempoMedio(ctx context.Context, f models.Filtros, agrupamento string) ([]models.GrupoTempoMedio, error)
 }
 
 type metricasProjetosRepository struct {
@@ -241,4 +245,61 @@ func (r *metricasProjetosRepository) HorasEtapa(ctx context.Context, f models.Fi
 	var h models.HorasEtapa
 	err := r.db.QueryRowContext(ctx, query, c.Args()...).Scan(&h.Estimado, &h.Real)
 	return h, err
+}
+
+// colunaAgrupamentoTempo é a whitelist dos agrupamentos do tempo médio.
+var colunaAgrupamentoTempo = map[string]string{
+	"complexidade": "complexidade",
+	"tipo":         "tipo",
+}
+
+func (r *metricasProjetosRepository) TempoMedio(ctx context.Context, f models.Filtros, agrupamento string) ([]models.GrupoTempoMedio, error) {
+	coluna, ok := colunaAgrupamentoTempo[agrupamento]
+	if !ok {
+		return nil, fmt.Errorf("agrupamento desconhecido: %q", agrupamento)
+	}
+	c := &ConsultaSQL{}
+	inicio, fimAte := utils.Intervalo(f.De, f.Ate)
+	pIni, pFim, pAte := c.Arg(inicio), c.Arg(fimAte), c.Arg(f.Ate.String())
+	query := "WITH " + CTEsEscopo(c, f) + `,
+	base AS (
+		SELECT a.id, a.` + coluna + `::text AS grupo, a.estimativa_horas,
+		       ` + StatusAtividadeAte("a.id", pFim) + ` AS status,
+		       (SELECT MAX(e.ocorrido_em) FROM atividade_eventos e
+		        WHERE e.atividade_id = a.id AND e.status = 'concluida'
+		          AND e.ocorrido_em < ` + pFim + `::timestamptz) AS concluida_em
+		FROM a
+	),
+	concluidas AS (
+		SELECT * FROM base
+		WHERE status = 'concluida'
+		  AND concluida_em >= ` + pIni + `::timestamptz AND concluida_em < ` + pFim + `::timestamptz
+	),
+	-- horas agregadas por atividade antes de juntar (1 linha por atividade)
+	horas AS (
+		SELECT h.atividade_id, SUM(h.horas) AS total
+		FROM h
+		WHERE h.atividade_id IN (SELECT id FROM concluidas) AND h.trabalhado_em <= ` + pAte + `::date
+		GROUP BY h.atividade_id
+	)
+	SELECT c.grupo, COUNT(*), AVG(COALESCE(h.total, 0))::float8, AVG(c.estimativa_horas)::float8
+	FROM concluidas c
+	LEFT JOIN horas h ON h.atividade_id = c.id
+	GROUP BY c.grupo`
+
+	rows, err := r.db.QueryContext(ctx, query, c.Args()...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	grupos := []models.GrupoTempoMedio{}
+	for rows.Next() {
+		var g models.GrupoTempoMedio
+		if err := rows.Scan(&g.Grupo, &g.N, &g.MediaReal, &g.MediaEstimada); err != nil {
+			return nil, err
+		}
+		grupos = append(grupos, g)
+	}
+	return grupos, rows.Err()
 }
