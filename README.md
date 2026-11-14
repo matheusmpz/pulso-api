@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Por enquanto existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`) e os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`).
+> **Status:** em construção. Por enquanto existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`) e os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), todas documentadas no [Swagger](#swagger).
 
 ## Stack
 
@@ -155,7 +155,7 @@ Get-Content db/dev_dados_exemplo.sql | docker compose exec -T db psql -U <DB_USE
 | `CORS_ORIGINS` | não | `http://localhost:3000` | Origens permitidas (separadas por vírgula), também usadas no WebSocket |
 | `POLL_INTERVAL_MS` | não | `2000` | Intervalo do polling de eventos |
 | `APP_TIMEZONE` | não | `America/Sao_Paulo` | Fuso dos limites de dia e dos timestamps das respostas (ex.: `expira_em`) |
-| `SWAGGER_ENABLED` | não | `true` | Serve o Swagger UI em `/swagger/index.html` |
+| `SWAGGER_ENABLED` | não | `true` | Serve o Swagger UI em `/swagger/index.html` (`true`/`false`; valor inválido impede a API de subir) |
 
 Se faltar alguma variável obrigatória, ou se `JWT_EXPIRA_HORAS` ou `APP_TIMEZONE` forem inválidos, a API não sobe e informa o motivo:
 
@@ -176,6 +176,35 @@ go test ./...
 ```
 
 Os testes de unidade não precisam de banco.
+
+## Swagger
+
+Com a API rodando e `SWAGGER_ENABLED=true` (o padrão), a documentação interativa fica em:
+
+**http://localhost:8080/swagger/index.html** (`/swagger` também funciona e redireciona para lá)
+
+Para testar uma rota protegida pelo navegador:
+
+1. Abra `POST /auth/login` → **Try it out**, preencha e-mail e senha → **Execute**.
+2. Copie o valor de `token` da resposta.
+3. Clique em **Authorize** (cadeado no topo) e informe `Bearer <token>`, com a palavra `Bearer`, um espaço e o token.
+4. Pronto: as rotas com cadeado passam a enviar o token. Ele continua salvo se você recarregar a página.
+
+Com `SWAGGER_ENABLED=false`, as rotas `/swagger` deixam de existir (404).
+
+### Regenerar a documentação
+
+A pasta `docs/` é **gerada** a partir dos comentários `@Summary`, `@Param`, `@Router` etc. dos handlers e do `cmd/api/main.go`. Não edite à mão. Depois de criar ou mudar uma rota:
+
+```bash
+# Uma vez: instalar a CLI do swag (mesma versão da biblioteca no go.mod)
+go install github.com/swaggo/swag/cmd/swag@v1.16.4
+
+# Regenerar
+swag init -g cmd/api/main.go -o docs
+```
+
+O `docs/` é versionado e entra na imagem Docker, então o Docker não precisa do `swag` para compilar.
 
 ## Branches
 
@@ -411,6 +440,11 @@ O dashboard e a lista dos cards que o perfil pode ver, **sem os dados calculados
 - **Permissões nos repositories de dashboard e card:** a checagem de `perfil_cards` vai como `JOIN` nas próprias consultas (`ListarVisiveis`), sem um `PermissaoRepository` separado por enquanto. Ele entra se a checagem de um card isolado (`/cards/:codigo/dados`) precisar.
 - **Formato de `GET /dashboards`:** `dados.dashboards` é uma lista (nunca `null`), sem paginação, porque são no máximo 3 itens. Ordenada por `id`, que segue a ordem do seed: projetos, vendas e IA.
 - **`GET /dashboards/:chave` sem cards permitidos dá 403**, e não lista vazia, como pede a regra "pedir dashboard sem permissão → 403".
+- **Swagger antes do fim do plano:** o plano original deixava o Swagger perto do final. Ele entrou na `PULAPI-006` para o front já testar as rotas existentes, e o `docs/` é regenerado a cada etapa nova. Filtros e escopo passaram para a `PULAPI-007`.
+- **Versão fixa do swag (`v1.16.4`):** a CLI e a biblioteca usam a mesma versão, para o `docs/docs.go` gerado ser compatível com o `go.mod`.
+- **`/swagger` redireciona para `/swagger/index.html`:** o `gin-swagger` só responde em `/swagger/*any`. O redirecionamento evita um 404 em quem digita só `/swagger`.
+- **Swagger UI com `PersistAuthorization`:** o token informado em **Authorize** continua salvo ao recarregar a página.
+- **`SWAGGER_ENABLED` aceita `true/false`, `1/0` e `sim/nao`.** Um valor diferente impede a API de subir, em vez de ser ignorado em silêncio.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -422,3 +456,4 @@ O dashboard e a lista dos cards que o perfil pode ver, **sem os dados calculados
 - `PULAPI-003` — Docker: `Dockerfile` multi-stage (usuário sem privilégio, `HEALTHCHECK`), `.dockerignore`, `docker-compose.yml` com Postgres 16 (schema e seed na primeira subida, porta 5433) e API, `.env.example` atualizado e seção "Rodando com Docker".
 - `PULAPI-004` — autenticação: `POST /auth/login` (bcrypt, mensagem genérica, tempo constante), `GET /auth/me`, geração e validação de JWT HS256, `AuthMiddleware` (injeta `usuario_id`, `perfil_id` e `perfil`), fuso da aplicação (`APP_TIMEZONE`) e testes.
 - `PULAPI-005` — dashboards, cards e permissões: `GET /dashboards` (só dashboards com cards ativos e permitidos, com `total_cards`), `GET /dashboards/:chave` (cards visíveis, sem dados), regra de acesso 404/403 e testes.
+- `PULAPI-006` — Swagger: `docs/` gerado pelo swag com as rotas existentes, Swagger UI em `/swagger/index.html` (com redirecionamento de `/swagger`), autenticação Bearer no **Authorize**, `SWAGGER_ENABLED` e instruções para regenerar.
