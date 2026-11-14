@@ -1,8 +1,8 @@
 // Pulso API — ponto de entrada.
 //
-// Nesta etapa (PULAPI-001) o main só sobe o servidor HTTP com Gin e CORS
-// e encerra de forma graciosa. Banco, rotas, autenticação, cálculos dos
-// cards e tempo real entram nas próximas etapas.
+// Carrega o .env, valida as variáveis obrigatórias, abre o pool do banco,
+// sobe o Gin com CORS e as rotas e encerra de forma graciosa.
+// Autenticação, cálculos dos cards e tempo real entram nas próximas etapas.
 //
 // @title          Pulso API
 // @version        1.0
@@ -29,6 +29,10 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+
+	"pulso-api/db"
+	"pulso-api/routes"
+	"pulso-api/utils"
 )
 
 // origemPadrao é usada quando CORS_ORIGINS está vazio (o gin-contrib/cors
@@ -45,6 +49,14 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Arquivo .env não encontrado; usando as variáveis do ambiente")
 	}
+
+	// Falha logo na inicialização se faltar variável obrigatória
+	if err := utils.ValidarAmbiente(); err != nil {
+		log.Fatal("Configuração inválida: ", err)
+	}
+
+	// Inicializa o banco e o pool antes de receber qualquer requisição
+	database := db.GetDB()
 
 	// Modo do Gin via variável de ambiente ou padrão release
 	modo := os.Getenv("GIN_MODE")
@@ -64,6 +76,9 @@ func main() {
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 	}))
+
+	// Registra todas as rotas passando o banco
+	routes.Register(r, database)
 
 	// Porta via variável de ambiente ou padrão 8080
 	port := os.Getenv("PORT")
@@ -96,6 +111,9 @@ func main() {
 
 	if err := srv.Shutdown(ctxEncerrar); err != nil {
 		log.Println("Erro ao encerrar o servidor: ", err)
+	}
+	if err := database.Close(); err != nil {
+		log.Println("Erro ao fechar o banco: ", err)
 	}
 	log.Println("Servidor encerrado")
 }
