@@ -39,6 +39,19 @@ type MetricasIARepository interface {
 	// CustoTipoComplexidade: custo de T no período e atividades distintas de
 	// A com consumo, por tipo e complexidade (ia-09).
 	CustoTipoComplexidade(ctx context.Context, f models.Filtros) ([]models.CustoTipoComplexidade, error)
+	// IntensidadeDesempenho: atividades de A concluídas no período com
+	// tokens > 0, em tercis de intensidade (tokens ÷ estimativa) por
+	// complexidade, com o desvio médio de cada faixa (ia-10).
+	IntensidadeDesempenho(ctx context.Context, f models.Filtros) ([]models.FaixaIntensidade, error)
+	// PesoIA: custo das horas (H) e de IA (T) no período por projeto de P,
+	// em ordem decrescente de custo total (ia-11).
+	PesoIA(ctx context.Context, f models.Filtros) ([]models.PesoIAProjeto, error)
+	// AlertasQuota: projetos de P com consumo acumulado até ate de pelo
+	// menos "limiar"% da quota, e o primeiro dia em que passaram (ia-12).
+	AlertasQuota(ctx context.Context, f models.Filtros, limiar float64) ([]models.AlertaQuota, error)
+	// AlertasPico: dias do período em que o consumo de um projeto passou de
+	// "fator" vezes a média dos "janela" dias anteriores (média > 0) (ia-12).
+	AlertasPico(ctx context.Context, f models.Filtros, fator float64, janela int) ([]models.AlertaPico, error)
 }
 
 type metricasIARepository struct {
