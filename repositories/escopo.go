@@ -27,6 +27,18 @@ func (c *ConsultaSQL) Args() []interface{} {
 	return c.args
 }
 
+// StatusAtividadeAte devolve a expressão SQL do status atual de uma
+// atividade até um instante (seção 8): o status do último evento com
+// ocorrido_em antes de pFim (maior ocorrido_em; empate, maior id). Sem
+// evento, 'aberta'. colunaID é a coluna com o id da atividade (ex.: a.id).
+func StatusAtividadeAte(colunaID, pFim string) string {
+	return fmt.Sprintf(`COALESCE((
+		SELECT e.status FROM atividade_eventos e
+		WHERE e.atividade_id = %s AND e.ocorrido_em < %s::timestamptz
+		ORDER BY e.ocorrido_em DESC, e.id DESC
+		LIMIT 1), 'aberta'::status_atividade)`, colunaID, pFim)
+}
+
 // CTEsEscopo monta as CTEs dos conjuntos do escopo (seção 7.2), para
 // usar depois de um WITH:
 //
