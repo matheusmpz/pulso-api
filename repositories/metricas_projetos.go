@@ -28,6 +28,9 @@ type MetricasProjetosRepository interface {
 	// Burndown: sprint alvo e, por dia dela, a estimativa ainda não
 	// concluída (proj-06). hoje decide a sprint ativa.
 	Burndown(ctx context.Context, f models.Filtros, hoje models.Data) (models.Burndown, error)
+	// HorasEtapa: estimativa da etapa em A e horas de H na etapa até ate
+	// (proj-07 análise, proj-08 desenvolvimento, proj-09 testes).
+	HorasEtapa(ctx context.Context, f models.Filtros, etapa string) (models.HorasEtapa, error)
 }
 
 type metricasProjetosRepository struct {
@@ -213,4 +216,29 @@ func (r *metricasProjetosRepository) Burndown(ctx context.Context, f models.Filt
 		b.Dias = append(b.Dias, d)
 	}
 	return b, rows.Err()
+}
+
+// colunaEstimativaPorEtapa é a whitelist das colunas de estimativa por
+// etapa (o nome da coluna nunca vem do usuário).
+var colunaEstimativaPorEtapa = map[string]string{
+	"analise":         "estimativa_analise",
+	"desenvolvimento": "estimativa_desenvolvimento",
+	"testes":          "estimativa_testes",
+}
+
+func (r *metricasProjetosRepository) HorasEtapa(ctx context.Context, f models.Filtros, etapa string) (models.HorasEtapa, error) {
+	coluna, ok := colunaEstimativaPorEtapa[etapa]
+	if !ok {
+		return models.HorasEtapa{}, fmt.Errorf("etapa desconhecida: %q", etapa)
+	}
+	c := &ConsultaSQL{}
+	pEtapa, pAte := c.Arg(etapa), c.Arg(f.Ate.String())
+	query := "WITH " + CTEsEscopo(c, f) + `
+	SELECT (SELECT COALESCE(SUM(a.` + coluna + `), 0)::float8 FROM a),
+	       (SELECT COALESCE(SUM(h.horas), 0)::float8 FROM h
+	        WHERE h.etapa = ` + pEtapa + `::etapa_trabalho AND h.trabalhado_em <= ` + pAte + `::date)`
+
+	var h models.HorasEtapa
+	err := r.db.QueryRowContext(ctx, query, c.Args()...).Scan(&h.Estimado, &h.Real)
+	return h, err
 }
