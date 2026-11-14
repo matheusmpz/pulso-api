@@ -59,6 +59,13 @@ func NovoRegistro(db *sql.DB) Registro {
 	reg.Registrar(NovoHistoricoSprints(projetos))       // proj-13
 	reg.Registrar(NovoDistribuicaoHoras(projetos))      // proj-14
 	reg.Registrar(NovoConsumoNoTempo(ia))               // proj-15
+
+	vendas := repositories.NewMetricasVendasRepository(db)
+	reg.Registrar(NovoReceitaFechada(vendas)) // ven-01
+	reg.Registrar(NovoTaxaConversao(vendas))  // ven-02
+	reg.Registrar(NovoTicketMedio(vendas))    // ven-03
+	reg.Registrar(NovoCicloVenda(vendas))     // ven-04
+	reg.Registrar(NovoFunilVendas(vendas))    // ven-05
 	return reg
 }
 

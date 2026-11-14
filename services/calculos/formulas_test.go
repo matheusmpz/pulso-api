@@ -66,3 +66,12 @@ func TestVariacao(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatarPercentual(t *testing.T) {
+	casos := map[float64]string{66.666: "66,7%", 100: "100,0%", 0: "0,0%", 85.25: "85,3%", 3.04: "3,0%"}
+	for v, esperado := range casos {
+		if got := FormatarPercentual(v); got != esperado {
+			t.Errorf("FormatarPercentual(%v): esperado %q, obtido %q", v, esperado, got)
+		}
+	}
+}

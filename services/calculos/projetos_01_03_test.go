@@ -162,3 +162,13 @@ func TestProj01a03Registrados(t *testing.T) {
 		}
 	}
 }
+
+// jsonDe devolve o JSON de um valor.
+func jsonDe(t *testing.T, v interface{}) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

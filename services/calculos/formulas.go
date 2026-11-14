@@ -1,6 +1,10 @@
 package calculos
 
-import "math"
+import (
+	"math"
+	"strconv"
+	"strings"
+)
 
 // Casas decimais da resposta (seção 8).
 const (
@@ -41,4 +45,10 @@ func Variacao(atual, anterior float64) *float64 {
 		return nil
 	}
 	return PtrArredondado((atual-anterior)/anterior*100, CasasPercentual)
+}
+
+// FormatarPercentual formata um percentual com 1 casa e vírgula decimal,
+// no padrão brasileiro: 66.666 → "66,7%".
+func FormatarPercentual(v float64) string {
+	return strings.Replace(strconv.FormatFloat(Arredondar(v, CasasPercentual), 'f', 1, 64), ".", ",", 1) + "%"
 }
