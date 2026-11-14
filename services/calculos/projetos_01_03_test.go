@@ -16,7 +16,10 @@ type repoProjetosFalso struct {
 	burnUp    models.BurnUp
 	status    models.ContagemStatus
 	burndown  models.Burndown
-	err       error
+	// proj-07 a 09
+	horasEtapa  map[string]models.HorasEtapa
+	etapaPedida *string
+	err         error
 }
 
 func (r repoProjetosFalso) Progresso(context.Context, models.Filtros) (models.ResumoProgresso, error) {
