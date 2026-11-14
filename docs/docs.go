@@ -107,6 +107,127 @@ const docTemplate = `{
                 }
             }
         },
+        "/cards/{codigo}/dados": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Calcula um card para os filtros informados. Os filtros valem conforme o dashboard do card (ex.: escopo é ignorado nos cards de vendas). Se o cálculo falhar, a resposta continua 200 e o card volta com \"erro\" no lugar de \"dados\", igual ao GET /dashboards/{chave}/dados. O formato de \"dados\" depende do tipo do card; veja a seção \"Formato dos dados dos cards\" do README.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cards"
+                ],
+                "summary": "Dados de um card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Código do card (ex.: proj-01, ven-03, ia-12)",
+                        "name": "codigo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "projeto",
+                            "time",
+                            "sprint"
+                        ],
+                        "type": "string",
+                        "default": "projeto",
+                        "description": "Escopo (projetos e ia)",
+                        "name": "escopo",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Id do projeto, time ou sprint, conforme o escopo (obrigatório em escopo=sprint)",
+                        "name": "id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Início do período (AAAA-MM-DD). Padrão: 29 dias antes de ate",
+                        "name": "de",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Fim do período (AAAA-MM-DD). Padrão: hoje",
+                        "name": "ate",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tipos de projeto, separados por vírgula (web, mobile, integracao, api, outro)",
+                        "name": "tipo_projeto",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status de projeto, separados por vírgula (projetos e ia)",
+                        "name": "status_projeto",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Origens de lead, separadas por vírgula (vendas)",
+                        "name": "origem_lead",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Modelos de IA, separados por vírgula (ia)",
+                        "name": "modelo",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.DadosCardDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Filtro inválido",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "403": {
+                        "description": "Você não tem acesso a este recurso",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Card inexistente ou inativo",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/dashboards": {
             "get": {
                 "security": [
@@ -213,6 +334,132 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboards/{chave}/dados": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Calcula todos os cards que o perfil pode ver no dashboard, para os filtros informados, e devolve a lista de resultados (CardResultado) na ordem dos códigos. Os cards são calculados em paralelo (até 4 ao mesmo tempo, 10 s por card). Se um card falhar, o endpoint não falha: aquele card volta com \"erro\" no lugar de \"dados\". Parâmetros que não valem para o dashboard são ignorados (ex.: escopo em vendas). O formato de \"dados\" depende do tipo do card; veja a seção \"Formato dos dados dos cards\" do README.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Dados de todos os cards de um dashboard",
+                "parameters": [
+                    {
+                        "enum": [
+                            "projetos",
+                            "vendas",
+                            "ia"
+                        ],
+                        "type": "string",
+                        "description": "Chave do dashboard",
+                        "name": "chave",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "projeto",
+                            "time",
+                            "sprint"
+                        ],
+                        "type": "string",
+                        "default": "projeto",
+                        "description": "Escopo (projetos e ia)",
+                        "name": "escopo",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Id do projeto, time ou sprint, conforme o escopo (obrigatório em escopo=sprint)",
+                        "name": "id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Início do período (AAAA-MM-DD). Padrão: 29 dias antes de ate",
+                        "name": "de",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Fim do período (AAAA-MM-DD). Padrão: hoje",
+                        "name": "ate",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tipos de projeto, separados por vírgula (web, mobile, integracao, api, outro)",
+                        "name": "tipo_projeto",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status de projeto, separados por vírgula (projetos e ia): em_andamento, concluido, pausado, cancelado",
+                        "name": "status_projeto",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Origens de lead, separadas por vírgula (vendas)",
+                        "name": "origem_lead",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Modelos de IA, separados por vírgula (ia)",
+                        "name": "modelo",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.DadosDashboardDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Filtro inválido",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "403": {
+                        "description": "Você não tem acesso a este recurso",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Dashboard inexistente ou inativo",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/filtros/opcoes": {
             "get": {
                 "security": [
@@ -284,6 +531,30 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "controllers.DadosCardDoc": {
+            "type": "object",
+            "properties": {
+                "dados": {
+                    "$ref": "#/definitions/models.DadosCard"
+                },
+                "sucesso": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "controllers.DadosDashboardDoc": {
+            "type": "object",
+            "properties": {
+                "dados": {
+                    "$ref": "#/definitions/models.DadosDashboard"
+                },
+                "sucesso": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
         "controllers.DashboardDetalheDoc": {
             "type": "object",
             "properties": {
@@ -391,6 +662,65 @@ const docTemplate = `{
                 }
             }
         },
+        "models.CardResultado": {
+            "type": "object",
+            "properties": {
+                "alerta": {
+                    "type": "object"
+                },
+                "atualizado_em": {
+                    "type": "string",
+                    "example": "2026-11-14T12:00:00-03:00"
+                },
+                "codigo": {
+                    "type": "string",
+                    "example": "proj-04"
+                },
+                "dados": {
+                    "type": "object"
+                },
+                "erro": {
+                    "type": "string",
+                    "example": ""
+                },
+                "tipo": {
+                    "type": "string",
+                    "example": "linhas"
+                },
+                "titulo": {
+                    "type": "string",
+                    "example": "Evolução do projeto (burn-up)"
+                }
+            }
+        },
+        "models.DadosCard": {
+            "type": "object",
+            "properties": {
+                "card": {
+                    "$ref": "#/definitions/models.CardResultado"
+                },
+                "filtros_aplicados": {
+                    "$ref": "#/definitions/models.Filtros"
+                }
+            }
+        },
+        "models.DadosDashboard": {
+            "type": "object",
+            "properties": {
+                "cards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CardResultado"
+                    }
+                },
+                "dashboard": {
+                    "$ref": "#/definitions/models.DashboardRef"
+                },
+                "filtros_aplicados": {
+                    "$ref": "#/definitions/models.Filtros"
+                }
+            }
+        },
         "models.DashboardDetalhe": {
             "type": "object",
             "properties": {
@@ -407,6 +737,23 @@ const docTemplate = `{
                 "descricao": {
                     "type": "string",
                     "example": "Andamento dos projetos em desenvolvimento."
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "titulo": {
+                    "type": "string",
+                    "example": "Projetos"
+                }
+            }
+        },
+        "models.DashboardRef": {
+            "type": "object",
+            "properties": {
+                "chave": {
+                    "type": "string",
+                    "example": "projetos"
                 },
                 "id": {
                     "type": "integer",
@@ -440,6 +787,54 @@ const docTemplate = `{
                 "total_cards": {
                     "type": "integer",
                     "example": 15
+                }
+            }
+        },
+        "models.Filtros": {
+            "type": "object",
+            "properties": {
+                "ate": {
+                    "type": "string",
+                    "example": "2026-11-14"
+                },
+                "de": {
+                    "type": "string",
+                    "example": "2026-10-16"
+                },
+                "escopo": {
+                    "type": "string",
+                    "example": "projeto"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "modelo": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "origem_lead": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status_projeto": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tipo_projeto": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "web"
+                    ]
                 }
             }
         },

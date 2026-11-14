@@ -116,3 +116,25 @@ func TestIntegracaoFiltroRepository(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegracaoCardRepository(t *testing.T) {
+	db := abrirBancoTeste(t)
+	repo := NewCardRepository(db)
+	ctx := context.Background()
+
+	codigos, err := repo.ListarCodigosAtivos(ctx)
+	if err != nil {
+		t.Fatalf("ListarCodigosAtivos: %v", err)
+	}
+	t.Logf("%d cards ativos", len(codigos))
+
+	if _, err := repo.BuscarAcesso(ctx, "nao-existe", 1); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("card inexistente deveria dar sql.ErrNoRows, obtido %v", err)
+	}
+	if len(codigos) > 0 {
+		a, err := repo.BuscarAcesso(ctx, codigos[0], 1)
+		if err != nil || a.Codigo != codigos[0] || !a.Ativo || a.DashboardChave == "" {
+			t.Errorf("BuscarAcesso inconsistente: %v %+v", err, a)
+		}
+	}
+}

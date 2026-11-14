@@ -11,11 +11,13 @@ import (
 	"pulso-api/utils"
 )
 
-// RegisterDashboards registra as rotas de metadados dos dashboards.
-func RegisterDashboards(r *gin.Engine, db *sql.DB, jwtCfg utils.ConfigJWT) {
+// RegisterDashboards registra as rotas de metadados e dados dos dashboards.
+func RegisterDashboards(r *gin.Engine, db *sql.DB, jwtCfg utils.ConfigJWT, calculos controllers.CalculadoraCards) {
 	ctrl := &controllers.DashboardController{
-		Repo:     repositories.NewDashboardRepository(db),
-		CardRepo: repositories.NewCardRepository(db),
+		Repo:       repositories.NewDashboardRepository(db),
+		CardRepo:   repositories.NewCardRepository(db),
+		FiltroRepo: repositories.NewFiltroRepository(db),
+		Calculos:   calculos,
 	}
 
 	g := r.Group("/dashboards")
@@ -23,6 +25,6 @@ func RegisterDashboards(r *gin.Engine, db *sql.DB, jwtCfg utils.ConfigJWT) {
 		g.Use(middlewares.AuthMiddleware(jwtCfg)) // protegido
 		g.GET("", ctrl.Listar)
 		g.GET("/:chave", ctrl.Buscar)
-		// GET /:chave/dados entra junto com os cálculos dos cards
+		g.GET("/:chave/dados", ctrl.Dados)
 	}
 }
