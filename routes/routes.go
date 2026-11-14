@@ -16,9 +16,9 @@ func Register(r *gin.Engine, db *sql.DB, jwtCfg utils.ConfigJWT) {
 	r.GET("/health", health.Verificar)
 
 	RegisterAuth(r, db, jwtCfg)
+	RegisterDashboards(r, db, jwtCfg)
 
 	// Rotas dos domínios — descomentar conforme as etapas forem entregues
-	// RegisterDashboards(r, db, jwtCfg)
 	// RegisterCards(r, db, jwtCfg)
 	// RegisterFiltros(r, db, jwtCfg)
 	// RegisterWS(r, db, jwtCfg)
