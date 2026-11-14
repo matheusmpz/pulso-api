@@ -26,6 +26,19 @@ type MetricasIARepository interface {
 	// ConsumoDiario: tokens de T por dia, de 6 dias antes de de até ate
 	// (com zeros), o acumulado até ate e a quota (ia-05).
 	ConsumoDiario(ctx context.Context, f models.Filtros) (models.ConsumoDiario, error)
+	// CustoPorProjeto: custo de T no período por projeto, decrescente (ia-06).
+	CustoPorProjeto(ctx context.Context, f models.Filtros) ([]models.GrupoCusto, error)
+	// CustoPorSprint: custo de T no período por sprint da atividade, com
+	// "Sem sprint" para consumo sem atividade ou de backlog (ia-06 com
+	// escopo=projeto e id).
+	CustoPorSprint(ctx context.Context, f models.Filtros) ([]models.GrupoCusto, error)
+	// CustoPorModelo: custo e tokens de T no período por modelo (ia-07).
+	CustoPorModelo(ctx context.Context, f models.Filtros) ([]models.GrupoCusto, error)
+	// CustoPorEtapa: custo de T no período por etapa (ia-08).
+	CustoPorEtapa(ctx context.Context, f models.Filtros) ([]models.GrupoCusto, error)
+	// CustoTipoComplexidade: custo de T no período e atividades distintas de
+	// A com consumo, por tipo e complexidade (ia-09).
+	CustoTipoComplexidade(ctx context.Context, f models.Filtros) ([]models.CustoTipoComplexidade, error)
 }
 
 type metricasIARepository struct {

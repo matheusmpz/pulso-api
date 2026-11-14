@@ -230,3 +230,20 @@ type ConsumoDiario struct {
 	TokensAcumulados int64
 	Quota            int64
 }
+
+// GrupoCusto é um rótulo com custo de IA e tokens (ia-06, ia-07, ia-08).
+type GrupoCusto struct {
+	Chave  string // valor bruto (ex.: modelo, etapa); vazio quando não se aplica
+	Rotulo string
+	Custo  float64
+	Tokens int64
+}
+
+// CustoTipoComplexidade alimenta o ia-09: custo de IA no período e
+// quantidade de atividades distintas por tipo e complexidade.
+type CustoTipoComplexidade struct {
+	Tipo         string
+	Complexidade string
+	Custo        float64
+	Atividades   int
+}
