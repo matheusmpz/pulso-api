@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ import (
 type repoDashboardFalso struct{ err error }
 
 var dashboardsFalsos = map[string]*models.Dashboard{
-	"projetos": {ID: 1, Chave: "projetos", Titulo: "Projetos", Descricao: "P", Ativo: true},
+	"projetos": {ID: 1, Chave: "projetos", Titulo: "Projetos", Descricao: "P", Cor: textoPtr("violet"), Ativo: true},
 	"vendas":   {ID: 2, Chave: "vendas", Titulo: "Vendas", Descricao: "V", Ativo: true},
 	"inativo":  {ID: 9, Chave: "inativo", Titulo: "Inativo", Descricao: "I", Ativo: false},
 }
@@ -45,7 +46,7 @@ func (r *repoDashboardFalso) ListarVisiveis(_ context.Context, perfilID int64) (
 	for _, chave := range []string{"projetos", "vendas", "inativo"} {
 		d := dashboardsFalsos[chave]
 		if n := len(cardsFalsos[d.ID][perfilID]); d.Ativo && n > 0 {
-			lista = append(lista, models.DashboardResumo{ID: d.ID, Chave: d.Chave, Titulo: d.Titulo, Descricao: d.Descricao, TotalCards: n})
+			lista = append(lista, models.DashboardResumo{ID: d.ID, Chave: d.Chave, Titulo: d.Titulo, Descricao: d.Descricao, Cor: d.Cor, TotalCards: n})
 		}
 	}
 	return lista, nil
@@ -195,5 +196,31 @@ func TestDashboardsSemToken(t *testing.T) {
 		if status, _ := executar(r, http.MethodGet, caminho, "", ""); status != http.StatusUnauthorized {
 			t.Errorf("%s sem token: esperado 401, obtido %d", caminho, status)
 		}
+	}
+}
+
+func textoPtr(s string) *string { return &s }
+
+// A cor do dashboard aparece nas duas rotas de metadados: o valor quando
+// existe e null quando a coluna está vazia.
+func TestDashboardsDevolvemCor(t *testing.T) {
+	r := novoRouterDashboards(&repoDashboardFalso{}, &repoCardFalso{})
+	token := tokenDoPerfil(t, 1, "diretoria")
+
+	_, lista := executar(r, http.MethodGet, "/dashboards", "", token)
+	if !strings.Contains(string(lista.Dados), `"chave":"projetos","titulo":"Projetos","descricao":"P","cor":"violet"`) {
+		t.Errorf("projetos deveria vir com cor violet: %s", lista.Dados)
+	}
+	if !strings.Contains(string(lista.Dados), `"chave":"vendas","titulo":"Vendas","descricao":"V","cor":null`) {
+		t.Errorf("vendas sem cor deveria vir com cor null: %s", lista.Dados)
+	}
+
+	_, detalhe := executar(r, http.MethodGet, "/dashboards/projetos", "", token)
+	if !strings.Contains(string(detalhe.Dados), `"cor":"violet"`) {
+		t.Errorf("detalhe deveria trazer a cor: %s", detalhe.Dados)
+	}
+	_, semCor := executar(r, http.MethodGet, "/dashboards/vendas", "", token)
+	if !strings.Contains(string(semCor.Dados), `"cor":null`) {
+		t.Errorf("detalhe sem cor deveria trazer null: %s", semCor.Dados)
 	}
 }

@@ -30,12 +30,12 @@ func (r *dashboardRepository) ListarVisiveis(ctx context.Context, perfilID int64
 	// Os JOINs só filtram (cada card aparece uma vez por perfil, pela PK de
 	// perfil_cards), então o COUNT não é inflado.
 	const query = `
-		SELECT d.id, d.chave, d.titulo, d.descricao, COUNT(c.id)::int AS total_cards
+		SELECT d.id, d.chave, d.titulo, d.descricao, d.cor, COUNT(c.id)::int AS total_cards
 		FROM dashboards d
 		JOIN cards c         ON c.dashboard_id = d.id AND c.ativo = true
 		JOIN perfil_cards pc ON pc.card_id = c.id AND pc.perfil_id = $1
 		WHERE d.ativo = true
-		GROUP BY d.id, d.chave, d.titulo, d.descricao
+		GROUP BY d.id, d.chave, d.titulo, d.descricao, d.cor
 		ORDER BY d.id`
 
 	rows, err := r.db.QueryContext(ctx, query, perfilID)
@@ -47,7 +47,7 @@ func (r *dashboardRepository) ListarVisiveis(ctx context.Context, perfilID int64
 	dashboards := []models.DashboardResumo{}
 	for rows.Next() {
 		var d models.DashboardResumo
-		if err := rows.Scan(&d.ID, &d.Chave, &d.Titulo, &d.Descricao, &d.TotalCards); err != nil {
+		if err := rows.Scan(&d.ID, &d.Chave, &d.Titulo, &d.Descricao, &d.Cor, &d.TotalCards); err != nil {
 			return nil, err
 		}
 		dashboards = append(dashboards, d)
@@ -57,12 +57,12 @@ func (r *dashboardRepository) ListarVisiveis(ctx context.Context, perfilID int64
 
 func (r *dashboardRepository) BuscarPorChave(ctx context.Context, chave string) (*models.Dashboard, error) {
 	const query = `
-		SELECT id, chave, titulo, descricao, ativo
+		SELECT id, chave, titulo, descricao, cor, ativo
 		FROM dashboards
 		WHERE chave = $1`
 
 	var d models.Dashboard
-	err := r.db.QueryRowContext(ctx, query, chave).Scan(&d.ID, &d.Chave, &d.Titulo, &d.Descricao, &d.Ativo)
+	err := r.db.QueryRowContext(ctx, query, chave).Scan(&d.ID, &d.Chave, &d.Titulo, &d.Descricao, &d.Cor, &d.Ativo)
 	if err != nil {
 		return nil, err
 	}

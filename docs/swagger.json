@@ -765,6 +765,10 @@
                     "type": "string",
                     "example": "projetos"
                 },
+                "cor": {
+                    "type": "string",
+                    "example": "violet"
+                },
                 "descricao": {
                     "type": "string",
                     "example": "Andamento dos projetos em desenvolvimento."
@@ -802,6 +806,10 @@
                 "chave": {
                     "type": "string",
                     "example": "projetos"
+                },
+                "cor": {
+                    "type": "string",
+                    "example": "violet"
                 },
                 "descricao": {
                     "type": "string",

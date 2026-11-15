@@ -101,6 +101,7 @@ func (h *DashboardController) Buscar(c *gin.Context) {
 		Chave:     dashboard.Chave,
 		Titulo:    dashboard.Titulo,
 		Descricao: dashboard.Descricao,
+		Cor:       dashboard.Cor,
 		Cards:     cards,
 	})
 }
