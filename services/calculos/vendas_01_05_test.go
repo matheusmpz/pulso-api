@@ -13,6 +13,10 @@ type repoVendasFalso struct {
 	conversao models.ResumoConversao
 	ciclo     models.ResumoCiclo
 	funil     []models.EtapaFunil
+	pipeline  []models.EtapaPipeline
+	motivos   []models.GrupoContagem
+	origens   []models.OrigemLeads
+	reunioes  []models.ReunioesDesfecho
 	recebidos *[]models.Filtros
 	err       error
 }

@@ -11,7 +11,7 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos e `ven-01` a `ven-05`.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
+> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). Os 41 cards estão registrados. **Já calculados: os 15 cards de projetos e `ven-01` a `ven-09`.** Os demais ainda estão pendentes e, até cada grupo ser implementado, voltam com `erro`. Veja [Cards implementados](#cards-implementados).
 
 ## Stack
 
@@ -692,6 +692,10 @@ Conjuntos **P** (projetos), **A** (atividades), **H** (horas), **T** (tokens) e 
 | `ven-03` Ticket médio | `numero` | Período | Receita ÷ número de vendas do período (`R$`; `null` sem vendas). `detalhe`: Vendas | `venda_fechada` |
 | `ven-04` Ciclo médio de venda | `numero` | Período | Média de dias (1 casa) entre `oportunidades.criado_em` e o evento `ganha`, nas oportunidades ganhas no período (`null` se nenhuma). `detalhe`: Ganhas | `etapa_oportunidade` |
 | `ven-05` Funil de vendas | `barras` (horizontal) | Período | Uma barra por etapa de `lead` a `ganha` (ordem de `funil_etapas`, sem `perdida`): oportunidades distintas com ao menos um evento daquela etapa no período. `extra` = conversão em relação à etapa anterior ("66,7%"; `null` na primeira ou se a anterior for 0). Unidade `oportunidades` | `etapa_oportunidade` |
+| `ven-06` Pipeline em aberto | `barras_agrupadas` | Acumulado | Oportunidades abertas em `ate` (estado não final), com o orçamento de **maior versão** emitido até `ate` cujo status atual não seja `recusada`, agrupadas pela etapa atual (só etapas com valor, na ordem do funil). Séries `bruto` (soma de `orcamentos.valor`) e `ponderado` (× `funil_etapas.probabilidade` da etapa). Unidade `R$` | `etapa_oportunidade`, `orcamento_emitido`, `orcamento_status` |
+| `ven-07` Motivos de perda | `donut` | Período | Oportunidades com evento `perdida` no período, por `motivo_perda` (fatias em ordem decrescente; `rotulo` e `chave` = o motivo). `total` = perdidas | `etapa_oportunidade` |
+| `ven-08` Origem dos leads | `barras` | Período | Oportunidades com `criado_em` no período, por `origem` (ordem decrescente). `valor` = leads; `extra` = conversão da origem entre os encerrados até `ate` (ganhas ÷ (ganhas + perdidas), "33,3%"; `null` se nenhum encerrado). Unidade `leads` | `etapa_oportunidade` |
+| `ven-09` Reuniões até fechar | `barras` | Período | Oportunidades encerradas (estado final `ganha`/`perdida`) no período. Dois itens, "Ganhas" e "Perdidas": média de reuniões por oportunidade (1 casa; `null` se o grupo estiver vazio). `extra` = `{n}` (quantidade de oportunidades). Unidade `reuniões` | `reuniao_registrada`, `etapa_oportunidade` |
 
 Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo):
 ```json
@@ -784,6 +788,8 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - **`origem_lead` em todos os cards de vendas:** a especificação cita o filtro explicitamente em `ven-02` e `ven-05`, e a seção 7.1 diz que ele vale no dashboard vendas. Por isso ele é aplicado em todos os cards, pela oportunidade do orçamento ou da venda.
 - **`detalhe` em `ven-02`, `ven-03` e `ven-04`:** a especificação não define. Foram usados ganhas e perdidas (02), quantidade de vendas (03) e quantidade de ganhas (04).
 - **Percentuais em texto no padrão brasileiro** (`FormatarPercentual`): 1 casa e vírgula ("66,7%"), como no exemplo do `ia-12`.
+- **Pipeline (`ven-06`) só com etapas que têm valor**, na ordem do funil. Uma oportunidade sem evento conta como `lead`; só entram orçamentos emitidos até `ate`.
+- **`ven-08` sem barra horizontal e `ven-09` com `extra.n`:** a especificação não pede barra horizontal no `ven-08`. No `ven-09`, o `n` ajuda o front a indicar quando a média vem de poucas oportunidades.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -805,3 +811,4 @@ Exemplo (`GET /cards/proj-03/dados?escopo=projeto&id=2`, com os dados de exemplo
 - `PULAPI-013` — cards `proj-10` e `proj-11` (tempo médio das atividades concluídas no período, por complexidade e por tipo) e testes.
 - `PULAPI-014` — cards `proj-12` (estouros), `proj-13` (histórico de sprints), `proj-14` (distribuição de horas) e `proj-15` (consumo de IA no tempo); dashboard de projetos completo.
 - `PULAPI-015` — base do dashboard vendas (CTEs `op`/`orc`/`vd`, `tipo_projeto` só nos cards de orçamento e venda) e cards `ven-01` (receita com variação), `ven-02` (conversão), `ven-03` (ticket médio), `ven-04` (ciclo de venda) e `ven-05` (funil).
+- `PULAPI-016` — cards `ven-06` (pipeline em aberto, bruto e ponderado), `ven-07` (motivos de perda), `ven-08` (origem dos leads com conversão) e `ven-09` (reuniões até fechar).

@@ -23,6 +23,17 @@ type MetricasVendasRepository interface {
 	// Funil: para cada etapa de lead a ganha (ordem de funil_etapas),
 	// oportunidades distintas com evento daquela etapa no período (ven-05).
 	Funil(ctx context.Context, f models.Filtros) ([]models.EtapaFunil, error)
+	// Pipeline: oportunidades abertas em ate, com o orçamento de maior
+	// versão não recusado, por etapa atual: bruto e ponderado (ven-06).
+	Pipeline(ctx context.Context, f models.Filtros) ([]models.EtapaPipeline, error)
+	// MotivosPerda: oportunidades perdidas no período, por motivo (ven-07).
+	MotivosPerda(ctx context.Context, f models.Filtros) ([]models.GrupoContagem, error)
+	// OrigemLeads: leads criados no período por origem, com ganhas e
+	// perdidas entre eles (ven-08).
+	OrigemLeads(ctx context.Context, f models.Filtros) ([]models.OrigemLeads, error)
+	// ReunioesAteFechar: média de reuniões por oportunidade encerrada no
+	// período, para ganhas e perdidas (ven-09).
+	ReunioesAteFechar(ctx context.Context, f models.Filtros) ([]models.ReunioesDesfecho, error)
 }
 
 type metricasVendasRepository struct {
