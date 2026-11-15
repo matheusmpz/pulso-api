@@ -34,6 +34,17 @@ type MetricasVendasRepository interface {
 	// ReunioesAteFechar: média de reuniões por oportunidade encerrada no
 	// período, para ganhas e perdidas (ven-09).
 	ReunioesAteFechar(ctx context.Context, f models.Filtros) ([]models.ReunioesDesfecho, error)
+	// ReceitaMensal: receita por mês de fechamento, em meses inteiros de
+	// mes(de) a mes(ate), com a meta do mês (ven-10).
+	ReceitaMensal(ctx context.Context, f models.Filtros) ([]models.MesReceita, error)
+	// StatusPropostas: orçamentos emitidos no período por status atual (ven-11).
+	StatusPropostas(ctx context.Context, f models.Filtros) (models.StatusPropostas, error)
+	// MargemPorComplexidade: orçamentos emitidos no período por
+	// complexidade: margem média, valor e horas (ven-12).
+	MargemPorComplexidade(ctx context.Context, f models.Filtros) ([]models.MargemComplexidade, error)
+	// OrcadoReal: orçamentos com venda no período, por tipo de projeto,
+	// com o realizado nos projetos ligados até ate (ven-13, ven-14).
+	OrcadoReal(ctx context.Context, f models.Filtros) ([]models.OrcadoRealTipo, error)
 }
 
 type metricasVendasRepository struct {

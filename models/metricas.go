@@ -168,3 +168,37 @@ type ReunioesDesfecho struct {
 	Media    *float64 // nil se não houver oportunidades
 	N        int
 }
+
+// MesReceita alimenta o ven-10: receita do mês e meta (nil se não houver).
+type MesReceita struct {
+	Mes     string // "AAAA-MM"
+	Receita float64
+	Meta    *float64
+}
+
+// StatusPropostas alimenta o ven-11: orçamentos emitidos no período por
+// status atual.
+type StatusPropostas struct {
+	Pendentes, Aprovadas, Recusadas, EmRevisao int
+}
+
+// MargemComplexidade alimenta o ven-12.
+type MargemComplexidade struct {
+	Complexidade string
+	N            int
+	MargemMedia  float64 // média de margem_prevista (%)
+	Valor        float64 // soma de valor
+	Horas        float64 // soma de horas_estimadas
+}
+
+// OrcadoRealTipo alimenta o ven-13 e o ven-14: orçamentos vendidos no
+// período, por tipo de projeto, e o realizado nos projetos ligados.
+type OrcadoRealTipo struct {
+	Tipo           string
+	HorasEstimadas float64 // soma de orcamentos.horas_estimadas
+	HorasReais     float64 // horas lançadas até ate nos projetos ligados
+	MargemPrevista float64 // soma de valor × margem_prevista ÷ 100
+	ValorVendido   float64 // soma de vendas.valor
+	CustoHoras     float64 // soma de horas × custo_hora até ate
+	CustoIA        float64 // soma do custo de IA até ate
+}
