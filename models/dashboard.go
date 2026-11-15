@@ -6,17 +6,21 @@ type Dashboard struct {
 	Chave     string `json:"chave" db:"chave" example:"projetos"`
 	Titulo    string `json:"titulo" db:"titulo" example:"Projetos"`
 	Descricao string `json:"descricao" db:"descricao" example:"Andamento dos projetos em desenvolvimento."`
-	Ativo     bool   `json:"-" db:"ativo"`
+	// Cor: nome de uma cor da paleta do Tailwind usada pelo front nos
+	// gráficos do dashboard (emerald, violet ou orange); nil = sem cor.
+	Cor   *string `json:"cor" db:"cor" example:"violet"`
+	Ativo bool    `json:"-" db:"ativo"`
 }
 
 // DashboardResumo é um item do GET /dashboards: o dashboard e quantos
 // cards ativos o perfil pode ver nele.
 type DashboardResumo struct {
-	ID         int64  `json:"id" example:"1"`
-	Chave      string `json:"chave" example:"projetos"`
-	Titulo     string `json:"titulo" example:"Projetos"`
-	Descricao  string `json:"descricao" example:"Andamento dos projetos em desenvolvimento."`
-	TotalCards int    `json:"total_cards" example:"15"`
+	ID         int64   `json:"id" example:"1"`
+	Chave      string  `json:"chave" example:"projetos"`
+	Titulo     string  `json:"titulo" example:"Projetos"`
+	Descricao  string  `json:"descricao" example:"Andamento dos projetos em desenvolvimento."`
+	Cor        *string `json:"cor" example:"violet"`
+	TotalCards int     `json:"total_cards" example:"15"`
 }
 
 // ListaDashboards é o conteúdo de "dados" no GET /dashboards.
@@ -39,5 +43,6 @@ type DashboardDetalhe struct {
 	Chave     string     `json:"chave" example:"projetos"`
 	Titulo    string     `json:"titulo" example:"Projetos"`
 	Descricao string     `json:"descricao" example:"Andamento dos projetos em desenvolvimento."`
+	Cor       *string    `json:"cor" example:"violet"`
 	Cards     []CardMeta `json:"cards"`
 }

@@ -138,6 +138,9 @@ definitions:
       chave:
         example: projetos
         type: string
+      cor:
+        example: violet
+        type: string
       descricao:
         example: Andamento dos projetos em desenvolvimento.
         type: string
@@ -164,6 +167,9 @@ definitions:
     properties:
       chave:
         example: projetos
+        type: string
+      cor:
+        example: violet
         type: string
       descricao:
         example: Andamento dos projetos em desenvolvimento.

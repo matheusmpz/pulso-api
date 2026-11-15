@@ -772,6 +772,10 @@ const docTemplate = `{
                     "type": "string",
                     "example": "projetos"
                 },
+                "cor": {
+                    "type": "string",
+                    "example": "violet"
+                },
                 "descricao": {
                     "type": "string",
                     "example": "Andamento dos projetos em desenvolvimento."
@@ -809,6 +813,10 @@ const docTemplate = `{
                 "chave": {
                     "type": "string",
                     "example": "projetos"
+                },
+                "cor": {
+                    "type": "string",
+                    "example": "violet"
                 },
                 "descricao": {
                     "type": "string",

@@ -138,3 +138,28 @@ func TestIntegracaoCardRepository(t *testing.T) {
 		}
 	}
 }
+
+// Depois do script PULAPI-023, os três dashboards do seed têm cor.
+func TestIntegracaoCorDosDashboards(t *testing.T) {
+	db := abrirBancoTeste(t)
+	repo := NewDashboardRepository(db)
+	esperadas := map[string]string{"projetos": "violet", "vendas": "emerald", "ia": "orange"}
+	for chave, cor := range esperadas {
+		d, err := repo.BuscarPorChave(context.Background(), chave)
+		if err != nil {
+			t.Fatalf("%s: %v (o script PULAPI-023 foi aplicado?)", chave, err)
+		}
+		if d.Cor == nil || *d.Cor != cor {
+			t.Errorf("%s: cor esperada %q, obtida %v", chave, cor, d.Cor)
+		}
+	}
+	lista, err := repo.ListarVisiveis(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range lista {
+		if d.Cor == nil || *d.Cor != esperadas[d.Chave] {
+			t.Errorf("lista: %s com cor %v", d.Chave, d.Cor)
+		}
+	}
+}

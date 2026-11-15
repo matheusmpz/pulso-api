@@ -125,7 +125,7 @@ curl http://localhost:8080/health
 
 Como funciona:
 
-- O serviço `db` usa `DB_USER`, `DB_PASSWORD` e `DB_NAME` do `.env` para criar o usuário e o banco na **primeira** subida. Em seguida, executa `db/schema_v2.sql` e `db/seed.sql`, que ficam montados como `01-schema.sql` e `02-seed.sql`.
+- O serviço `db` usa `DB_USER`, `DB_PASSWORD` e `DB_NAME` do `.env` para criar o usuário e o banco na **primeira** subida. Em seguida, executa `db/schema_v2.sql` e `db/seed.sql` (montados como `01-schema.sql` e `02-seed.sql`) e **todos os scripts de `db/migrations/`**, em ordem alfabética, pelo `03-migrations.sh` (veja [Scripts de banco](#scripts-de-banco-migrations)).
 - O serviço `api` só sobe depois que o banco passa no `pg_isready`. Ele lê todas as variáveis do `.env`, mas o compose força `DB_HOST=db` e `DB_PORT=5432` (nome do serviço e porta interna na rede do Docker).
 - A API fica em `localhost:<PORT>` (padrão 8080). O banco fica acessível na sua máquina em `localhost:5433`, ou na porta definida em `DB_PORTA_DOCKER`, para usar DBeaver ou `psql`.
 - Os dados ficam no volume `pulso_pgdata` e sobrevivem a `docker compose down`.
@@ -297,13 +297,33 @@ Cada `INSERT` numa tabela monitorada vira um evento de tempo real e atualiza os 
 | `orcamentos` | `orcamento_emitido` |
 | `orcamento_eventos` | `orcamento_status` |
 
+## Scripts de banco (migrations)
+
+Não há ferramenta de migration. Cada etapa que muda o banco cria **um** script em `db/migrations/PULAPI-XXX_script.sql`, sempre **idempotente** (pode rodar mais de uma vez sem erro). `db/schema_v2.sql` e `db/seed.sql` nunca são editados.
+
+| Script | O que faz |
+|---|---|
+| `PULAPI-023_script.sql` | Coluna `dashboards.cor` (`emerald`, `violet`, `orange` ou nula) e preenchimento dos 3 dashboards: vendas `emerald`, projetos `violet`, IA `orange` (só onde estiver nula) |
+
+**Bancos novos (Docker):** os scripts entram **automaticamente**. Na primeira criação do volume, o Postgres roda `01-schema.sql`, `02-seed.sql` e `03-migrations.sh` (`db/docker-init-migrations.sh`), que executa `db/migrations/*.sql` em ordem alfabética. Um script novo colocado na pasta já vale para quem criar o banco do zero (`docker compose down -v` e `up`).
+
+**Bancos já existentes:** aplique cada script novo **manualmente**, uma vez:
+
+```bash
+docker compose exec -T db psql -v ON_ERROR_STOP=1 -U <DB_USER> -d <DB_NAME> < db/migrations/PULAPI-023_script.sql
+```
+
+No PowerShell: `Get-Content db/migrations/PULAPI-023_script.sql | docker compose exec -T db psql -v ON_ERROR_STOP=1 -U <DB_USER> -d <DB_NAME>`. Também dá para abrir o arquivo no DBeaver e usar **Executar script** (`Alt+X`).
+
+> Até o script ser aplicado, as rotas que leem a coluna nova (`GET /dashboards` e `GET /dashboards/:chave`, e a assinatura do WebSocket) respondem erro 500, porque a coluna ainda não existe.
+
 ## Branches
 
 - `main` → produção
 - `develop` → desenvolvimento
 - `PULAPI-XXX` → uma branch por etapa, criada a partir da `develop`
 
-Commits no formato `PULAPI-XXX - Descrição simples do que foi feito`. Mudanças de banco ficam em `db/migrations/PULAPI-XXX_script.sql` e são aplicadas manualmente.
+Commits no formato `PULAPI-XXX - Descrição simples do que foi feito`. Mudanças de banco ficam em `db/migrations/PULAPI-XXX_script.sql` (veja [Scripts de banco](#scripts-de-banco-migrations)).
 
 ---
 
@@ -433,6 +453,8 @@ No seed, `diretoria` vê os 41 cards (projetos, vendas e IA) e `lider_tecnologia
 #### `GET /dashboards`
 Dashboards que o perfil do usuário pode ver, com a quantidade de cards visíveis em cada um, ordenados por `id`. Se o perfil não vê nenhum, a lista vem vazia (`[]`).
 
+`cor` é o nome de uma cor da paleta do Tailwind que o front usa nos gráficos do dashboard: `emerald`, `violet`, `orange` ou `null` (sem cor definida). Também vem em `GET /dashboards/:chave`.
+
 **Resposta de sucesso `200`** (perfil `lider_tecnologia`)
 ```json
 {
@@ -444,6 +466,7 @@ Dashboards que o perfil do usuário pode ver, com a quantidade de cards visívei
         "chave": "projetos",
         "titulo": "Projetos",
         "descricao": "Andamento dos projetos em desenvolvimento: progresso, horas por etapa, sprints e eficiência, por projeto, time ou sprint.",
+        "cor": "violet",
         "total_cards": 15
       }
     ]
@@ -472,6 +495,7 @@ O dashboard e a lista dos cards que o perfil pode ver, **sem os dados calculados
     "chave": "projetos",
     "titulo": "Projetos",
     "descricao": "Andamento dos projetos em desenvolvimento: ...",
+    "cor": "violet",
     "cards": [
       {
         "codigo": "proj-01",
@@ -943,6 +967,8 @@ Se algum evento acontecer entre a carga pelo REST e a assinatura, o front pode r
 - **Aviso ao desligar:** além do `Sessão expirada.` pedido, o servidor envia `Servidor encerrando.` antes de fechar no SIGINT/SIGTERM, para o front saber que deve reconectar.
 - **Escrita no WebSocket por uma goroutine só:** o gorilla/websocket aceita um escritor por vez. Mensagens e avisos passam pela goroutine de escrita da conexão; o frame de fechamento usa `WriteControl`, que é seguro em paralelo.
 - **Log de requisições próprio (`middlewares.Logger`):** o logger padrão do Gin grava a URL com a query string, e o token do WebSocket vai na query. O log usa o mesmo formato do padrão, mas troca o valor de `token` por `***`.
+- **`cor` como `*string` no Go:** a coluna aceita nulo, e o JSON precisa devolver `null` quando estiver vazia (e não `""`).
+- **Migrations no Docker por script de shell (`03-migrations.sh`):** a pasta `db/migrations` é montada só leitura em `/pulso-migrations` e o script executa cada `.sql` com `ON_ERROR_STOP=1`; um erro interrompe a criação do banco, em vez de deixar um banco pela metade.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -971,3 +997,4 @@ Se algum evento acontecer entre a carga pelo REST e a assinatura, o front pode r
 - `PULAPI-020` — cards `ia-10` (intensidade de IA × desempenho em tercis), `ia-11` (peso da IA no custo) e `ia-12` (alertas de quota e de picos), constantes de limiar no código; os 41 cards implementados.
 - `PULAPI-021` — tempo real: poller dos `MAX(id)` das 9 tabelas, hub com grupos de assinatura (dashboard + filtros + perfil), recálculo só dos cards afetados e envio só do que mudou, WebSocket `GET /ws` com token na query, checagem de origem, ping/pong, expiração da sessão, cliente lento e encerramento gracioso; testes com WebSocket real.
 - `PULAPI-022` — revisão final contra os critérios de aceite: log de requisições sem o token do WebSocket (`?token=***`) e README revisado (visão geral, estrutura e fluxo).
+- `PULAPI-023` — campo `cor` nos dashboards (`GET /dashboards` e `GET /dashboards/:chave`), script `db/migrations/PULAPI-023_script.sql` e migrations aplicadas automaticamente em bancos novos do Docker (`db/docker-init-migrations.sh`).

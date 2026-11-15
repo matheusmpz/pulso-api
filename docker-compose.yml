@@ -44,6 +44,13 @@ services:
       - ./db/schema_v2.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
 
+      # Depois do schema e do seed, executa os scripts de db/migrations/
+      # (PULAPI-XXX_script.sql) em ordem alfabética. A pasta é montada em
+      # /pulso-migrations, só leitura, e o script 03 percorre os arquivos.
+      # Assim um banco criado do zero já sai com todas as mudanças.
+      - ./db/docker-init-migrations.sh:/docker-entrypoint-initdb.d/03-migrations.sh:ro
+      - ./db/migrations:/pulso-migrations:ro
+
     # Diz ao Docker como saber se o banco está pronto para conexões.
     # O pg_isready vem na imagem do Postgres. O "$$" escapa o "$" para o
     # compose: a variável é lida dentro do container, não no seu .env.
