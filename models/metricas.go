@@ -73,3 +73,44 @@ type GrupoTempoMedio struct {
 	MediaReal     float64 // média das horas lançadas totais da atividade
 	MediaEstimada float64 // média de estimativa_horas
 }
+
+// AtividadeEstourada alimenta o proj-12: atividade de A com horas reais
+// acima da estimativa.
+type AtividadeEstourada struct {
+	Titulo     string
+	Projeto    string
+	Estimativa float64
+	Reais      float64
+}
+
+// Estouros alimenta o proj-12: as maiores (top) e a quantidade total.
+type Estouros struct {
+	Top   []AtividadeEstourada
+	Total int
+}
+
+// SprintHistorico alimenta o proj-13.
+type SprintHistorico struct {
+	Sprint    Sprint
+	Planejado float64 // estimativa das atividades alocadas à sprint
+	Concluido float64 // estimativa das concluídas ao fim de min(fim da sprint, ate)
+	Destaque  bool    // a sprint do filtro (escopo=sprint)
+}
+
+// GrupoHoras alimenta o proj-14: horas por desenvolvedor ou por projeto.
+type GrupoHoras struct {
+	Rotulo string
+	Horas  float64
+}
+
+// DiaConsumo alimenta o proj-15: tokens acumulados até o fim do dia.
+type DiaConsumo struct {
+	Dia              Data
+	TokensAcumulados int64
+}
+
+// ConsumoNoTempo alimenta o proj-15.
+type ConsumoNoTempo struct {
+	Quota int64
+	Dias  []DiaConsumo
+}

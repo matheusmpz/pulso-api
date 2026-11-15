@@ -55,6 +55,10 @@ func NovoRegistro(db *sql.DB) Registro {
 	reg.Registrar(NovoHorasEtapa("proj-09", "testes", projetos))
 	reg.Registrar(NovoTempoMedioComplexidade(projetos)) // proj-10
 	reg.Registrar(NovoTempoMedioTipo(projetos))         // proj-11
+	reg.Registrar(NovoEstouros(projetos))               // proj-12
+	reg.Registrar(NovoHistoricoSprints(projetos))       // proj-13
+	reg.Registrar(NovoDistribuicaoHoras(projetos))      // proj-14
+	reg.Registrar(NovoConsumoNoTempo(ia))               // proj-15
 	return reg
 }
 

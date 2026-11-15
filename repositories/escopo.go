@@ -39,6 +39,20 @@ func StatusAtividadeAte(colunaID, pFim string) string {
 		LIMIT 1), 'aberta'::status_atividade)`, colunaID, pFim)
 }
 
+// CTEProjetosFiltrados monta "pf AS (...)": projetos filtrados só por
+// tipo_projeto e status_projeto, sem o recorte do escopo. Usado quando o
+// card precisa olhar além de A (ex.: o histórico de sprints do proj-13).
+func CTEProjetosFiltrados(c *ConsultaSQL, f models.Filtros) string {
+	pTipos := c.Arg(pq.Array(f.TipoProjeto))
+	pStatus := c.Arg(pq.Array(f.StatusProjeto))
+	return fmt.Sprintf(`
+	pf AS (
+		SELECT pr.id FROM projetos pr
+		WHERE (%[1]s::tipo_projeto[] IS NULL OR pr.tipo = ANY(%[1]s::tipo_projeto[]))
+		  AND (%[2]s::status_projeto[] IS NULL OR pr.status = ANY(%[2]s::status_projeto[]))
+	)`, pTipos, pStatus)
+}
+
 // CTEsEscopo monta as CTEs dos conjuntos do escopo (seção 7.2), para
 // usar depois de um WITH:
 //
