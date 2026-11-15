@@ -37,12 +37,17 @@ func (r repoProjetosFalso) Horas(context.Context, models.Filtros) (models.Resumo
 }
 
 type repoIAFalso struct {
-	consumo   models.ResumoConsumoIA
-	noTempo   models.ConsumoNoTempo
-	tokens    map[string]models.ResumoTokensPeriodo
-	custoAtiv models.ResumoCustoAtividades
-	diario    models.ConsumoDiario
-	err       error
+	consumo    models.ResumoConsumoIA
+	noTempo    models.ConsumoNoTempo
+	tokens     map[string]models.ResumoTokensPeriodo
+	custoAtiv  models.ResumoCustoAtividades
+	diario     models.ConsumoDiario
+	porProjeto []models.GrupoCusto
+	porSprint  []models.GrupoCusto
+	porModelo  []models.GrupoCusto
+	porEtapa   []models.GrupoCusto
+	tipoCx     []models.CustoTipoComplexidade
+	err        error
 }
 
 func (r repoIAFalso) ConsumoAcumulado(context.Context, models.Filtros) (models.ResumoConsumoIA, error) {
