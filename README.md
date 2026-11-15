@@ -11,7 +11,23 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 - Esta API só faz `SELECT` nas tabelas de dados, detecta dado novo por polling e envia as mudanças pelo WebSocket.
 - O front só desenha o que a API manda. Toda a regra de cálculo está aqui.
 
-> **Status:** em construção. Já existem o `GET /health`, a autenticação (`POST /auth/login` e `GET /auth/me`), os metadados dos dashboards com controle de acesso (`GET /dashboards` e `GET /dashboards/:chave`), as opções de filtro (`GET /filtros/opcoes`) e as rotas de dados dos cards (`GET /dashboards/:chave/dados` e `GET /cards/:codigo/dados`), todas documentadas no [Swagger](#swagger). **Os 41 cards estão calculados** (15 de projetos, 14 de vendas e 12 de IA). As atualizações chegam em tempo real pelo [WebSocket](#tempo-real-websocket) (`GET /ws`). Veja [Cards implementados](#cards-implementados).
+**O que a API oferece:**
+
+- Login com JWT e controle de acesso por perfil e por card (`diretoria` vê os 41 cards; `lider_tecnologia`, os 15 de projetos).
+- Metadados dos dashboards e dos cards, inclusive o texto do modal de informação de cada card.
+- Os **41 cards calculados** (15 de projetos, 14 de vendas e 12 de IA), com filtros por escopo (projeto, time, sprint), período, tipo e status de projeto, origem do lead e modelo de IA. Veja [Cards implementados](#cards-implementados).
+- **Tempo real** pelo [WebSocket](#tempo-real-websocket): quando o gerador insere dados, os cards afetados são recalculados e enviados, só se mudaram.
+- Documentação interativa no [Swagger](#swagger) e [dados de exemplo](#dados-de-exemplo) para desenvolvimento.
+
+| Rota | Para que serve |
+|---|---|
+| `GET /health` | API e banco no ar |
+| `POST /auth/login`, `GET /auth/me` | Login e usuário logado |
+| `GET /dashboards`, `GET /dashboards/:chave` | Dashboards e cards visíveis ao perfil |
+| `GET /dashboards/:chave/dados`, `GET /cards/:codigo/dados` | Dados calculados dos cards |
+| `GET /filtros/opcoes` | Opções para preencher os filtros |
+| `GET /ws?token=` | WebSocket de atualizações |
+| `GET /swagger/index.html` | Swagger UI |
 
 ## Stack
 
@@ -26,22 +42,34 @@ API do **Pulso**, o dashboard de BI da Fábrica de Software (Grupo 7, "Estratég
 
 ```
 pulso-api/
-├── cmd/api/main.go      → ponto de entrada (.env, Gin, CORS, shutdown gracioso)
-├── routes/              → registro de rotas (um arquivo por domínio)
-├── controllers/         → recebe requisições e devolve respostas
-├── repositories/        → queries SQL por domínio (interface + implementação)
-├── models/              → entidades, filtros e formatos dos cards
-├── middlewares/         → validação do JWT
+├── cmd/api/main.go           → entrada: .env, validação do ambiente, banco, registro dos
+│                               cálculos, poller, Gin, rotas, Swagger e shutdown gracioso
+├── routes/                   → registro das rotas, um arquivo por domínio
+│                               (auth, dashboards, cards, filtros, ws, swagger)
+├── controllers/              → handlers HTTP e o handshake do WebSocket
+├── repositories/             → SQL puro (interface + implementação)
+│   ├── usuario, dashboard, card, filtro, evento
+│   ├── escopo.go             → conjuntos do escopo (CTEs p, a, h, t, quota) e status atual
+│   ├── escopo_vendas.go      → CTEs do dashboard vendas (op, orc, vd)
+│   └── metricas_*.go         → números de cada card (projetos, vendas, IA)
+├── models/                   → entidades, filtros, enums, resultado e formatos dos cards
+├── middlewares/              → validação do JWT e log de requisições sem o token
 ├── services/
-│   ├── calculos/        → um Calculador por card
-│   └── tempo_real/      → hub do WebSocket e poller de eventos
+│   ├── calculos/             → um Calculador por card, registro (41), serviço de cálculo,
+│   │                           fórmulas puras e constantes de limiar
+│   └── tempo_real/           → poller de eventos, hub de assinaturas e conexões WebSocket
 ├── db/
-│   ├── migrations/      → scripts PULAPI-XXX_script.sql (aplicados manualmente)
-│   ├── schema_v2.sql    → DDL (já executado; só referência)
-│   └── seed.sql         → seed (já executado; só referência)
-├── utils/               → respostas padronizadas e helpers
-└── docs/                → Swagger gerado pelo swag (não editar à mão)
+│   ├── migrations/           → scripts PULAPI-XXX_script.sql (aplicados manualmente)
+│   ├── schema_v2.sql         → DDL (já executado; só referência)
+│   ├── seed.sql              → seed (já executado; só referência)
+│   └── dev_dados_exemplo.sql → dados de exemplo (só desenvolvimento)
+├── utils/                    → respostas, JWT, filtros, datas, acesso e ambiente
+├── docs/                     → Swagger gerado pelo swag (não editar à mão)
+├── Dockerfile, docker-compose.yml, .dockerignore
+└── .env.example
 ```
+
+O fluxo de uma requisição de dados: **rota → middleware (JWT) → controller** (acesso e filtros) **→ serviço de cálculo → Calculador do card → repository de métricas → PostgreSQL**. Os controllers recebem interfaces de repository, nunca o `*sql.DB`.
 
 ## Rodando localmente
 
@@ -836,7 +864,7 @@ Se algum evento acontecer entre a carga pelo REST e a assinatura, o front pode r
 - **String de conexão:** montada no formato `chave='valor'` com escape de aspas e barras, para senhas com espaço ou aspas não quebrarem a conexão.
 - **`/health` fora do envelope:** devolve `{ status, banco }` direto, como pede a especificação. O controller recebe uma interface `Pinger` (o `*sql.DB` a satisfaz), para ser testado sem banco.
 - **Pool fechado no encerramento:** depois do `Shutdown` do servidor, o `main.go` fecha o `*sql.DB`.
-- **Docker antes da autenticação:** a etapa de Docker (`PULAPI-003`) veio antes do login a pedido do dono do projeto. A autenticação passa a ser a próxima etapa.
+- **Docker antes da autenticação:** a etapa de Docker (`PULAPI-003`) veio antes do login a pedido do dono do projeto; a autenticação entrou em seguida, na `PULAPI-004`.
 - **Porta do banco no compose configurável:** o padrão é `5433:5432`, mas o lado do host pode mudar por `DB_PORTA_DOCKER`, para resolver colisão de porta sem editar o compose.
 - **`DB_PORT=5432` forçado no compose, junto com `DB_HOST=db`:** o `.env` local costuma ter a porta do Postgres da máquina, e dentro da rede do Docker a porta é sempre a interna.
 - **Credenciais do Postgres do container:** `POSTGRES_USER`, `POSTGRES_PASSWORD` e `POSTGRES_DB` são preenchidas com as mesmas `DB_USER`, `DB_PASSWORD` e `DB_NAME` do `.env`, para a API e o banco nunca divergirem. O compose para com mensagem clara se alguma faltar.
@@ -914,6 +942,7 @@ Se algum evento acontecer entre a carga pelo REST e a assinatura, o front pode r
 - **Origem vazia aceita no WebSocket:** clientes que não são navegador (testes, scripts) não mandam `Origin`; o token continua obrigatório.
 - **Aviso ao desligar:** além do `Sessão expirada.` pedido, o servidor envia `Servidor encerrando.` antes de fechar no SIGINT/SIGTERM, para o front saber que deve reconectar.
 - **Escrita no WebSocket por uma goroutine só:** o gorilla/websocket aceita um escritor por vez. Mensagens e avisos passam pela goroutine de escrita da conexão; o frame de fechamento usa `WriteControl`, que é seguro em paralelo.
+- **Log de requisições próprio (`middlewares.Logger`):** o logger padrão do Gin grava a URL com a query string, e o token do WebSocket vai na query. O log usa o mesmo formato do padrão, mas troca o valor de `token` por `***`.
 - **`.gitignore`:** além do pedido, ignora `.env.*` (exceto `.env.example`), arquivos de chave/certificado e o binário do Delve (`__debug_bin*`). Em `.vscode/`, só o `launch.json` é versionado.
 
 ---
@@ -941,3 +970,4 @@ Se algum evento acontecer entre a carga pelo REST e a assinatura, o front pode r
 - `PULAPI-019` — cards `ia-06` (custo por projeto, ou por sprint com um projeto selecionado), `ia-07` (custo por modelo), `ia-08` (custo por etapa) e `ia-09` (custo médio por tipo e complexidade).
 - `PULAPI-020` — cards `ia-10` (intensidade de IA × desempenho em tercis), `ia-11` (peso da IA no custo) e `ia-12` (alertas de quota e de picos), constantes de limiar no código; os 41 cards implementados.
 - `PULAPI-021` — tempo real: poller dos `MAX(id)` das 9 tabelas, hub com grupos de assinatura (dashboard + filtros + perfil), recálculo só dos cards afetados e envio só do que mudou, WebSocket `GET /ws` com token na query, checagem de origem, ping/pong, expiração da sessão, cliente lento e encerramento gracioso; testes com WebSocket real.
+- `PULAPI-022` — revisão final contra os critérios de aceite: log de requisições sem o token do WebSocket (`?token=***`) e README revisado (visão geral, estrutura e fluxo).
