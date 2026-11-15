@@ -57,3 +57,10 @@ type Burndown struct {
 	Total  float64 // soma das estimativas das atividades da sprint em A
 	Dias   []DiaBurndown
 }
+
+// HorasEtapa alimenta o proj-07/08/09: estimativa da etapa nas
+// atividades de A e horas de H lançadas na etapa até ate.
+type HorasEtapa struct {
+	Estimado float64
+	Real     float64
+}
