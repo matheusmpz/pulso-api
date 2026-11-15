@@ -741,6 +741,36 @@ paths:
       summary: Verifica a saúde da API
       tags:
       - health
+  /ws:
+    get:
+      description: Abre o WebSocket de atualizações. O token vai na query (?token=<jwt>),
+        porque o navegador não envia o cabeçalho Authorization no upgrade; ele é validado
+        antes do upgrade (401 se inválido). A origem precisa estar em CORS_ORIGINS
+        (403 se não estiver). Depois de conectar, o cliente envia {"tipo":"assinar","dashboard":"projetos","filtros":{...}}
+        e recebe {"tipo":"assinado",...} e, a cada mudança, {"tipo":"card_atualizado","card":"proj-04","dados":{CardResultado}}.
+        Detalhes do protocolo na seção "Tempo real (WebSocket)" do README.
+      parameters:
+      - description: JWT obtido no POST /auth/login
+        in: query
+        name: token
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "401":
+          description: Token ausente, inválido ou expirado
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+        "403":
+          description: Origem não permitida
+          schema:
+            $ref: '#/definitions/controllers.ErroDoc'
+      summary: WebSocket (tempo real)
+      tags:
+      - tempo real
 securityDefinitions:
   BearerAuth:
     description: Informe o valor no formato "Bearer <token>" (com a palavra Bearer

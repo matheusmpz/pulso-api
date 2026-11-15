@@ -528,6 +528,44 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/ws": {
+            "get": {
+                "description": "Abre o WebSocket de atualizações. O token vai na query (?token=\u003cjwt\u003e), porque o navegador não envia o cabeçalho Authorization no upgrade; ele é validado antes do upgrade (401 se inválido). A origem precisa estar em CORS_ORIGINS (403 se não estiver). Depois de conectar, o cliente envia {\"tipo\":\"assinar\",\"dashboard\":\"projetos\",\"filtros\":{...}} e recebe {\"tipo\":\"assinado\",...} e, a cada mudança, {\"tipo\":\"card_atualizado\",\"card\":\"proj-04\",\"dados\":{CardResultado}}. Detalhes do protocolo na seção \"Tempo real (WebSocket)\" do README.",
+                "tags": [
+                    "tempo real"
+                ],
+                "summary": "WebSocket (tempo real)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "JWT obtido no POST /auth/login",
+                        "name": "token",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Token ausente, inválido ou expirado",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    },
+                    "403": {
+                        "description": "Origem não permitida",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ErroDoc"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
