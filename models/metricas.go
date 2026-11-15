@@ -114,3 +114,27 @@ type ConsumoNoTempo struct {
 	Quota int64
 	Dias  []DiaConsumo
 }
+
+// ResumoReceita alimenta o ven-01 e o ven-03: vendas fechadas num período.
+type ResumoReceita struct {
+	Valor  float64
+	Vendas int
+}
+
+// ResumoConversao alimenta o ven-02: oportunidades encerradas no período.
+type ResumoConversao struct {
+	Ganhas, Perdidas int
+}
+
+// ResumoCiclo alimenta o ven-04: oportunidades ganhas no período.
+type ResumoCiclo struct {
+	MediaDias *float64 // nil se nenhuma
+	Ganhas    int
+}
+
+// EtapaFunil alimenta o ven-05: oportunidades distintas com ao menos um
+// evento da etapa no período.
+type EtapaFunil struct {
+	Etapa         string
+	Oportunidades int
+}
