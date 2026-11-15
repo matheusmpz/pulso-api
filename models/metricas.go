@@ -202,3 +202,31 @@ type OrcadoRealTipo struct {
 	CustoHoras     float64 // soma de horas × custo_hora até ate
 	CustoIA        float64 // soma do custo de IA até ate
 }
+
+// ResumoTokensPeriodo alimenta o ia-01 e o ia-02: consumo de T no período.
+type ResumoTokensPeriodo struct {
+	Custo   float64
+	Entrada int64
+	Saida   int64
+}
+
+// ResumoCustoAtividades alimenta o ia-04: atividades de A concluídas no
+// período e o custo de IA ligado a elas.
+type ResumoCustoAtividades struct {
+	Atividades int
+	Custo      float64
+}
+
+// DiaTokens é o consumo de tokens de um dia (ia-05).
+type DiaTokens struct {
+	Dia    Data
+	Tokens int64
+}
+
+// ConsumoDiario alimenta o ia-05: tokens por dia desde 6 dias antes de de
+// até ate (com zeros), o acumulado até ate e a quota.
+type ConsumoDiario struct {
+	Dias             []DiaTokens
+	TokensAcumulados int64
+	Quota            int64
+}
