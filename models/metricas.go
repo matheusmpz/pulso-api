@@ -247,3 +247,35 @@ type CustoTipoComplexidade struct {
 	Custo        float64
 	Atividades   int
 }
+
+// FaixaIntensidade alimenta o ia-10: desvio médio das atividades de uma
+// complexidade numa faixa (tercil) de intensidade de IA.
+type FaixaIntensidade struct {
+	Complexidade string
+	Faixa        int     // 1 = baixa, 2 = média, 3 = alta
+	DesvioMedio  float64 // média de horas reais ÷ estimativa × 100
+	N            int
+}
+
+// PesoIAProjeto alimenta o ia-11: custo das horas e custo de IA no
+// período, por projeto.
+type PesoIAProjeto struct {
+	Projeto    string
+	CustoHoras float64
+	CustoIA    float64
+}
+
+// AlertaQuota alimenta o ia-12: projeto com quota usada acima do limiar.
+type AlertaQuota struct {
+	Projeto    string
+	Percentual float64
+	Quando     Data // primeiro dia em que o acumulado passou do limiar de atenção
+}
+
+// AlertaPico alimenta o ia-12: dia com consumo acima de FatorPico × a
+// média dos dias anteriores.
+type AlertaPico struct {
+	Projeto string
+	Dia     Data
+	Razao   float64 // consumo do dia ÷ média dos dias anteriores
+}

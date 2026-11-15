@@ -135,3 +135,12 @@ type DadosLista struct {
 	Linhas  [][]string `json:"linhas"`
 	Total   int        `json:"total" example:"3"`
 }
+
+// DadosIntensidade é o "dados" do ia-10: um barras_agrupadas com a linha
+// de referência (100% = no prazo) e a amostra mínima para o front marcar
+// "amostra pequena" quando n_* < amostra_minima.
+type DadosIntensidade struct {
+	DadosBarrasAgrupadas
+	Referencia    float64 `json:"referencia" example:"100"`
+	AmostraMinima int     `json:"amostra_minima" example:"5"`
+}
