@@ -129,6 +129,31 @@ SELECT 'Diretoria (dev)', 'diretoria@pulso.local',
 FROM perfis p WHERE p.nome = 'diretoria';
 
 INSERT INTO usuarios (nome, email, senha_hash, perfil_id)
+SELECT 'Matheus', 'matheus@pulso.local',
+       '$2a$10$3deVWhSV8o.05j366I5C1./g2W.A0.kYAd496RGy7pmqg4jtzGBPW', p.id
+FROM perfis p WHERE p.nome = 'diretoria';
+
+INSERT INTO usuarios (nome, email, senha_hash, perfil_id)
+SELECT 'Alessandro', 'alessandro@pulso.local',
+       '$2a$12$VZ26cdvbzXzospuH350gJ.N9foUXxBRC9sFHaz6FDo5JXXtyyx23O', p.id
+FROM perfis p WHERE p.nome = 'diretoria';
+
+INSERT INTO usuarios (nome, email, senha_hash, perfil_id)
+SELECT 'Bruno', 'bruno@pulso.local',
+       '$2a$12$Z5xwkh6UJovof5GSAszQwu7PozJD7XMfHy2ZBZN7J70qK1jacE9ZK', p.id
+FROM perfis p WHERE p.nome = 'diretoria';
+
+INSERT INTO usuarios (nome, email, senha_hash, perfil_id)
+SELECT 'Felipe', 'felipe@pulso.local',
+       '$2a$12$VDmUxeJFj6Rgihs3ZSI7NOmyAfaZ4L.slPu9RW1xIzEcnC0KmpUTa', p.id
+FROM perfis p WHERE p.nome = 'diretoria';
+
+INSERT INTO usuarios (nome, email, senha_hash, perfil_id)
+SELECT 'Caio', 'caio@pulso.local',
+       '$2a$12$NH0gY1/EZ3QQarPpI8YI3O6TfGvBP1.K9E0CzxYaV2RSAIOjBTgqe', p.id
+FROM perfis p WHERE p.nome = 'diretoria';
+
+INSERT INTO usuarios (nome, email, senha_hash, perfil_id)
 SELECT 'Líder de Tecnologia (dev)', 'lider@pulso.local',
        '$2a$10$ZmVOlb5nJx56JWMOTI8Z3uUkJ/78ro9q3GykTq3f2HU/DPONr.Bua', p.id
 FROM perfis p WHERE p.nome = 'lider_tecnologia';
